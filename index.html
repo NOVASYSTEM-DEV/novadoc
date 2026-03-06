@@ -642,11 +642,8 @@ function showCtxMenu(e, type) {
   const deleteEl = document.getElementById('ctx-delete');
   if (versionsEl) versionsEl.style.display = isContributor && type==='file' ? '' : 'none';
   if (sepDelEl) sepDelEl.style.display = isContributor ? '' : 'none';
-  // Suppression: seulement si créateur ou si createdBy vide (fallback)
-  const currentUser = document.getElementById('user-name').textContent;
-  const isCreator = !ctxTarget.createdBy || ctxTarget.createdBy === currentUser || 
-                    ctxTarget.createdBy.toLowerCase().includes(currentUser.toLowerCase().split(' ')[0]);
-  if (deleteEl) deleteEl.style.display = isContributor && isCreator ? '' : 'none';
+  // Suppression: visible si contributeur
+  if (deleteEl) deleteEl.style.display = isContributor ? '' : 'none';
   menu.style.display = 'block';
   const x = Math.min(e.clientX, window.innerWidth-220);
   const y = Math.min(e.clientY, window.innerHeight-300);
@@ -676,6 +673,33 @@ async function ctxRename() {
     await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}`, 'PATCH', { name: newName });
     await loadCurrentFolder(); await loadTree();
   } catch(e) { alert('Erreur renommage: '+e.message); }
+}
+
+async function ctxVersions() {
+  if (!ctxTarget || ctxTarget.type !== 'file') return;
+  try {
+    const data = await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}/versions`);
+    const versions = data.value || [];
+    if (!versions.length) { alert('Aucune version disponible.'); return; }
+    const lines = versions.map((v,i) => {
+      const date = new Date(v.lastModifiedDateTime).toLocaleString('fr-FR');
+      const size = v.size ? formatSize(v.size) : '—';
+      return `${i+1}. ${date} — ${size}${i===0?' (actuelle)':''}`;
+    });
+    const choice = prompt(`Historique de "${ctxTarget.name}" (${versions.length} version(s)) :\n\n${lines.join('\n')}\n\nEntrez le numéro à restaurer (ou Annuler) :`);
+    if (!choice) return;
+    const idx = parseInt(choice) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= versions.length) { alert('Numéro invalide.'); return; }
+    if (idx === 0) { alert('C\'est déjà la version actuelle.'); return; }
+    const versionId = versions[idx].id;
+    if (!confirm(`Restaurer la version ${choice} (${lines[idx]}) ?`)) return;
+    const token = await getToken();
+    await fetch(`https://graph.microsoft.com/v1.0/drives/${currentDriveId}/items/${ctxTarget.id}/versions/${versionId}/restoreVersion`, {
+      method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+    });
+    await loadCurrentFolder();
+    alert('✅ Version restaurée.');
+  } catch(e) { alert('Erreur versions: '+e.message); }
 }
 
 async function ctxDelete() {
