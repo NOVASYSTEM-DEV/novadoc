@@ -800,11 +800,6 @@ async function createNew(type) {
       body: new Uint8Array([0])
     });
     await loadCurrentFolder();
-    // Ouvrir dans Office Online pour initialiser le fichier
-    if (uploadRes.ok) {
-      const item = await uploadRes.json().catch(()=>null);
-      if (item && item.webUrl) setTimeout(()=> window.open(item.webUrl + '?web=1', '_blank'), 800);
-    }
   } catch(e) { alert('Erreur création: '+e.message); await loadCurrentFolder(); }
 }
 
