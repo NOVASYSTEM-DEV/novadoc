@@ -516,6 +516,24 @@ function buildTreeNodes(items, container, depth) {
     el.innerHTML = `<svg class="tree-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.4"><polyline points="9 18 15 12 9 6"/></svg>${folderIconSmall()}<span style="overflow:hidden;text-overflow:ellipsis">${item.name}</span>`;
     const childContainer = document.createElement('div');
     childContainer.className = 'tree-children';
+    // Drag & drop depuis la zone principale vers l'arborescence
+    el.addEventListener('dragover', e => {
+      if (!dragSource || dragSource.id === item.id) return;
+      e.preventDefault(); e.stopPropagation();
+      el.style.background = 'rgba(47,111,212,0.25)';
+      el.style.borderRadius = '4px';
+    });
+    el.addEventListener('dragleave', () => {
+      el.style.background = '';
+    });
+    el.addEventListener('drop', e => {
+      e.preventDefault(); e.stopPropagation();
+      el.style.background = '';
+      if (!dragSource || dragSource.id === item.id) return;
+      moveTarget = { id: item.id, name: item.name };
+      showMoveModal();
+    });
+
     el.addEventListener('click', async e => {
       e.stopPropagation();
       await navigateTo(buildPathTo(item));
