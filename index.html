@@ -260,23 +260,6 @@
   </div>
 </div>
 
-<!-- MODAL CORBEILLE -->
-<div class="modal-overlay" id="trash-modal">
-  <div class="modal" style="width:600px;max-height:80vh;display:flex;flex-direction:column">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <h3 style="margin:0">🗑 Corbeille</h3>
-      <button class="modal-btn" onclick="closeTrashModal()" style="padding:4px 12px">✕</button>
-    </div>
-    <div id="trash-list" style="flex:1;overflow-y:auto;min-height:200px">
-      <div class="loading"><div class="spinner"></div> Chargement...</div>
-    </div>
-    <div class="modal-actions" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
-      <button class="modal-btn danger" onclick="emptyTrash()" style="color:#e74c3c;border-color:#e74c3c">Vider la corbeille</button>
-      <button class="modal-btn primary" onclick="closeTrashModal()">Fermer</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL MOVE/COPY -->
 <div class="modal-overlay" id="move-modal">
   <div class="modal">
@@ -356,7 +339,6 @@
         </div>
       </div>
       <button class="toolbar-btn" id="paste-btn" onclick="pasteItems()" style="display:none">📋 Coller</button>
-      <button class="toolbar-btn" id="trash-btn" onclick="showTrash()">🗑 Corbeille</button>
       <div class="toolbar-spacer"></div>
       <div class="view-toggle">
         <button class="view-btn active" id="view-grid" onclick="setView('grid')" title="Vignettes">
@@ -399,7 +381,7 @@ const msalConfig = {
   auth: { clientId: CLIENT_ID, authority: `https://login.microsoftonline.com/${TENANT_ID}`, redirectUri: window.location.origin },
   cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
 };
-const scopes = ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'User.Read', 'Mail.Send'];
+const scopes = ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'User.Read', 'Mail.Send', 'https://novasystemfr.sharepoint.com/AllSites.Manage'];
 
 let msalInstance;
 async function initMsal() {
@@ -783,7 +765,7 @@ async function ctxVersions() {
 
 async function ctxDelete() {
   if (!ctxTarget) return;
-  if (!confirm(`Supprimer "${ctxTarget.name}" ?`)) return;
+  if (!confirm(`Supprimer "${ctxTarget.name}" ?\n\nL'élément sera récupérable pendant 30 jours par l'administrateur.`)) return;
   try {
     await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}`, 'DELETE');
     await loadCurrentFolder(); await loadTree();
@@ -950,7 +932,7 @@ async function pasteItems() {
 
 async function selDelete() {
   if (!selectedItems.length) return;
-  if (!confirm(`Supprimer ${selectedItems.length} élément(s) ?`)) return;
+  if (!confirm(`Supprimer ${selectedItems.length} élément(s) ?\n\nLes éléments seront récupérables pendant 30 jours par l'administrateur.`)) return;
   const toDelete = [...selectedItems];
   clearSelection();
   showLoading('Suppression...');
@@ -966,13 +948,101 @@ async function selDelete() {
 }
 
 // ─── CORBEILLE ────────────────────────────────────────────────────────────────
-function updateTrashBadge() {
-  const btn = document.getElementById('trash-btn');
-  if (btn) btn.textContent = trashItems.length > 0 ? `🗑 Corbeille (${trashItems.length})` : '🗑 Corbeille';
+function updateTrashBadge() { /* corbeille désactivée */ }
+
+async function showTrash() {
+  document.getElementById('trash-modal').classList.add('open');
+  document.getElementById('trash-list').innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
+  try {
+    const token = await getToken();
+    // API REST SharePoint pour la corbeille
+    const res = await fetch('https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_api/site/RecycleBin?$orderby=DeletedDate desc&$select=Id,Title,Size,DeletedDate,DeletedByName,DirName,ItemType', {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json;odata=verbose' }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    const items = data.d?.results || [];
+    renderTrashList(items);
+  } catch(e) {
+    document.getElementById('trash-list').innerHTML = `<div class="trash-empty">
+      <p style="margin-bottom:12px;color:#e74c3c">Erreur: ${e.message}</p>
+      <a href="https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_layouts/15/RecycleBin.aspx" target="_blank"
+         style="background:var(--accent);color:white;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px">
+        Ouvrir la corbeille SharePoint
+      </a>
+    </div>`;
+  }
 }
 
-function showTrash() {
-  window.open('https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_layouts/15/RecycleBin.aspx', '_blank');
+function renderTrashList(items) {
+  const list = document.getElementById('trash-list');
+  list._items = items;
+  if (!items.length) {
+    list.innerHTML = '<div class="trash-empty">🎉 La corbeille est vide</div>';
+    return;
+  }
+  list.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border)">
+          <th style="text-align:left;padding:8px 12px;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Nom</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Date de suppression</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Supprimé par</th>
+          <th style="text-align:left;padding:8px 12px;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Emplacement</th>
+          <th style="padding:8px 12px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((item, i) => {
+          const isFolder = item.ItemType === 1;
+          const emoji = isFolder ? '📁' : getFileEmoji(item.Title);
+          const date = item.DeletedDate ? new Date(item.DeletedDate.replace('/Date(','').replace(')/','') * 1 || item.DeletedDate).toLocaleString('fr-FR') : '—';
+          const size = item.Size ? formatSize(item.Size) : '';
+          const loc = (item.DirName||'').replace('sites/TESTSHAREPOINTEXCEL/Documents','Documents');
+          return `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:9px 12px"><div style="display:flex;align-items:center;gap:8px">${emoji} <span style="font-weight:500">${item.Title}</span>${size?`<span style="color:var(--text-muted);font-size:11px">(${size})</span>`:''}</div></td>
+            <td style="padding:9px 12px;color:var(--text-muted)">${date}</td>
+            <td style="padding:9px 12px;color:var(--text-muted)">${item.DeletedByName||'—'}</td>
+            <td style="padding:9px 12px;color:var(--text-muted)">${loc}</td>
+            <td style="padding:9px 12px"><button class="trash-restore-btn" onclick="restoreTrashItem('${item.Id}','${item.Title.replace(/'/g,"\\'")}')">Restaurer</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function restoreTrashItem(id, name) {
+  if (!confirm(`Restaurer "${name}" ?`)) return;
+  try {
+    const token = await getToken();
+    const res = await fetch(`https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_api/site/RecycleBin('${id}')/restore()`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json;odata=verbose', 'X-RequestDigest': 'no-auth' }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    await showTrash();
+    await loadCurrentFolder();
+    await loadTree();
+    alert(`✅ "${name}" restauré.`);
+  } catch(e) {
+    alert(`Erreur restauration: ${e.message}`);
+  }
+}
+
+async function emptyTrash() {
+  if (!confirm('Vider définitivement la corbeille ? Action irréversible.')) return;
+  try {
+    const token = await getToken();
+    const res = await fetch('https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_api/site/RecycleBin/DeleteAll()', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json;odata=verbose' }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    closeTrashModal();
+    alert('Corbeille vidée.');
+  } catch(e) {
+    alert('Erreur: '+e.message);
+  }
 }
 
 function closeTrashModal() {
