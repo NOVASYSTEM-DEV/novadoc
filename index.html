@@ -547,7 +547,7 @@ function gridItemHTML(item) {
 }
 
 function listItemHTML(item) {
-  const { isFolder, parentPath } = getItemData(item);
+  const { isFolder, parentPath, createdBy } = getItemData(item);
   const ext = isFolder ? '' : (item.name.split('.').pop()||'').toLowerCase();
   const icon = isFolder ? folderIconSmall() : fileIconSmall(ext);
   const date = item.lastModifiedDateTime ? new Date(item.lastModifiedDateTime).toLocaleDateString('fr-FR') : '—';
