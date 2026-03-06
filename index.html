@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NovaDoc — Explorateur de documents</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f4f5f7;
+    --sidebar-bg: #1e2230;
+    --sidebar-hover: #2a3047;
+    --sidebar-text: #a8b0c8;
+    --sidebar-text-bright: #e8ecf4;
+    --main-bg: #ffffff;
+    --border: #e2e5ed;
+    --accent: #2f6fd4;
+    --accent-light: #e8f0fc;
+    --text: #1e2230;
+    --text-muted: #8890a8;
+    --hover-row: #f7f9ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── LOGIN ── */
+  #login-screen {
+    position: fixed; inset: 0;
+    background: var(--sidebar-bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; flex-direction: column; gap: 32px;
+  }
+
+  .login-box {
+    background: #fff; border-radius: 8px;
+    padding: 48px 56px; width: 400px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+  }
+
+  .login-logo { font-size: 22px; font-weight: 600; color: var(--accent); margin-bottom: 8px; letter-spacing: -0.5px; }
+  .login-logo span { color: #f5a623; }
+  .login-subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 36px; }
+
+  .login-ms-btn {
+    width: 100%; padding: 12px 20px;
+    background: var(--accent); color: white;
+    border: none; border-radius: 6px;
+    font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; font-weight: 500;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+    transition: background 0.15s;
+  }
+  .login-ms-btn:hover { background: #2460c0; }
+  .login-note { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 20px; }
+  .login-error { font-size: 12px; color: #e74c3c; text-align: center; margin-top: 12px; display: none; }
+
+  /* ── TOPBAR ── */
+  #topbar {
+    height: 48px; background: var(--sidebar-bg);
+    display: flex; align-items: center; padding: 0 20px; gap: 16px;
+    flex-shrink: 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .topbar-logo { font-size: 16px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
+  .topbar-logo span { color: #f5a623; }
+  .topbar-spacer { flex: 1; }
+  .topbar-search {
+    display: flex; align-items: center;
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px; padding: 6px 12px; gap: 8px; width: 260px;
+  }
+  .topbar-search input {
+    background: none; border: none; outline: none;
+    color: var(--sidebar-text-bright); font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; width: 100%;
+  }
+  .topbar-search input::placeholder { color: var(--sidebar-text); }
+  .topbar-user {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--sidebar-text); font-size: 13px; cursor: pointer;
+    padding: 4px 8px; border-radius: 6px; transition: background 0.15s;
+  }
+  .topbar-user:hover { background: rgba(255,255,255,0.07); }
+  .user-avatar {
+    width: 28px; height: 28px; background: var(--accent);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: white;
+  }
+
+  /* ── LAYOUT ── */
+  #app { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width: 240px; background: var(--sidebar-bg); flex-shrink: 0;
+    display: flex; flex-direction: column; overflow-y: auto; padding: 12px 0;
+  }
+  #sidebar::-webkit-scrollbar { width: 4px; }
+  #sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  .sidebar-section-label {
+    font-size: 10px; font-weight: 600; color: var(--sidebar-text);
+    letter-spacing: 1px; text-transform: uppercase; padding: 12px 20px 6px;
+  }
+  .tree-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 20px; cursor: pointer; color: var(--sidebar-text); font-size: 13px;
+    transition: background 0.1s, color 0.1s; border-left: 2px solid transparent;
+    user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tree-item:hover { background: var(--sidebar-hover); color: var(--sidebar-text-bright); }
+  .tree-item.active { background: rgba(47,111,212,0.15); color: #fff; border-left-color: var(--accent); }
+  .tree-item svg { flex-shrink: 0; }
+  .tree-toggle { width: 14px; height: 14px; flex-shrink: 0; transition: transform 0.15s; color: var(--sidebar-text); }
+  .tree-toggle.open { transform: rotate(90deg); }
+  .tree-children { display: none; }
+  .tree-children.open { display: block; }
+  .tree-item.depth-1 { padding-left: 34px; }
+  .tree-item.depth-2 { padding-left: 48px; }
+  .tree-item.depth-3 { padding-left: 62px; }
+
+  /* ── MAIN ── */
+  #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--main-bg); }
+
+  #breadcrumb {
+    padding: 10px 24px; display: flex; align-items: center; gap: 6px;
+    border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text-muted);
+    flex-shrink: 0; background: #fafbfd; flex-wrap: wrap;
+  }
+  .bc-item { cursor: pointer; color: var(--accent); transition: color 0.1s; }
+  .bc-item:hover { color: #2460c0; text-decoration: underline; }
+  .bc-item.current { color: var(--text); cursor: default; font-weight: 500; }
+  .bc-item.current:hover { text-decoration: none; }
+  .bc-sep { color: var(--border); }
+
+  #toolbar {
+    padding: 10px 24px; display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .toolbar-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 6px;
+    font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: background 0.15s;
+    border: 1px solid var(--border); background: white; color: var(--text);
+  }
+  .toolbar-btn:hover { background: var(--hover-row); }
+  .toolbar-btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .toolbar-btn.primary:hover { background: #2460c0; }
+  .toolbar-spacer { flex: 1; }
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .view-btn { padding: 6px 10px; cursor: pointer; background: white; border: none; color: var(--text-muted); transition: background 0.1s; }
+  .view-btn.active { background: var(--accent-light); color: var(--accent); }
+  .view-btn:hover:not(.active) { background: var(--hover-row); }
+
+  #content { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  #content::-webkit-scrollbar { width: 6px; }
+  #content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── GRID ── */
+  .grid-view { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+  .grid-item {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px 8px 12px; border-radius: 8px; cursor: pointer;
+    transition: background 0.1s; border: 1px solid transparent; text-align: center; gap: 8px;
+  }
+  .grid-item:hover { background: var(--accent-light); border-color: rgba(47,111,212,0.15); }
+  .grid-item .item-name { font-size: 12px; color: var(--text); word-break: break-word; line-height: 1.3; }
+
+  /* ── LIST ── */
+  .list-view { width: 100%; border-collapse: collapse; }
+  .list-view thead tr { border-bottom: 2px solid var(--border); }
+  .list-view th {
+    text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600;
+    color: var(--text-muted); letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .list-view tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
+  .list-view tbody tr:hover { background: var(--hover-row); }
+  .list-view td { padding: 9px 12px; font-size: 13px; color: var(--text); }
+  .list-view td.muted { color: var(--text-muted); font-size: 12px; }
+  .file-row-name { display: flex; align-items: center; gap: 10px; }
+
+  /* ── LOADING ── */
+  .loading {
+    display: flex; align-items: center; justify-content: center;
+    height: 200px; color: var(--text-muted); gap: 12px; font-size: 14px;
+  }
+  .spinner {
+    width: 20px; height: 20px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 300px; color: var(--text-muted); gap: 12px;
+  }
+  .empty-state p { font-size: 14px; }
+
+  #statusbar {
+    padding: 6px 24px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--text-muted);
+    display: flex; align-items: center; gap: 16px; background: #fafbfd; flex-shrink: 0;
+  }
+
+  /* ── UPLOAD OVERLAY ── */
+  .upload-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(47,111,212,0.1); border: 3px dashed var(--accent);
+    z-index: 50; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 500; color: var(--accent);
+  }
+  .upload-overlay.active { display: flex; }
+
+  /* ── CONTEXT MENU ── */
+  #ctx-menu {
+    position: fixed; background: white; border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    z-index: 200; min-width: 180px; padding: 4px 0; display: none;
+  }
+  .ctx-item {
+    padding: 8px 16px; font-size: 13px; cursor: pointer; color: var(--text);
+    display: flex; align-items: center; gap: 10px; transition: background 0.1s;
+  }
+  .ctx-item:hover { background: var(--hover-row); }
+  .ctx-item.danger { color: #e74c3c; }
+  .ctx-sep { border-top: 1px solid var(--border); margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">Nova<span>Doc</span></div>
+    <div class="login-subtitle">Accès sécurisé aux documents — NOVASYSTEM</div>
+    <button class="login-ms-btn" onclick="msalLogin()">
+      <svg width="20" height="20" viewBox="0 0 21 21" fill="none">
+        <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+        <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+        <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+        <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+      </svg>
+      Se connecter avec Microsoft 365
+    </button>
+    <div class="login-error" id="login-error">Erreur de connexion. Vérifie tes permissions Azure AD.</div>
+    <div class="login-note">Authentification sécurisée via Azure AD · SSO entreprise</div>
+  </div>
+</div>
+
+<!-- UPLOAD OVERLAY -->
+<div class="upload-overlay" id="upload-overlay">📁 Déposez vos fichiers ici</div>
+
+<!-- CONTEXT MENU -->
+<div id="ctx-menu">
+  <div class="ctx-item" onclick="ctxDownload()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Télécharger
+  </div>
+  <div class="ctx-item" onclick="ctxOpen()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    Ouvrir dans SharePoint
+  </div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item danger contributor-only" onclick="ctxDelete()" style="display:none">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+    Supprimer
+  </div>
+</div>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div class="topbar-logo">Nova<span>Doc</span></div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" placeholder="Rechercher..." id="search-input" oninput="filterItems(this.value)">
+  </div>
+  <div class="topbar-user" onclick="doLogout()">
+    <div class="user-avatar" id="user-avatar">?</div>
+    <span id="user-name">—</span>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div id="sidebar">
+    <div class="sidebar-section-label">Dossiers</div>
+    <div id="tree-root"></div>
+  </div>
+  <div id="main">
+    <div id="breadcrumb"></div>
+    <div id="toolbar">
+      <button class="toolbar-btn primary contributor-only" onclick="triggerUpload()" style="display:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Déposer
+      </button>
+      <button class="toolbar-btn contributor-only" onclick="createNewFolder()" style="display:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+        Nouveau dossier
+      </button>
+      <div class="toolbar-spacer"></div>
+      <div class="view-toggle">
+        <button class="view-btn active" id="view-grid" onclick="setView('grid')" title="Vignettes">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
+        <button class="view-btn" id="view-list" onclick="setView('list')" title="Liste">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="content"><div class="loading"><div class="spinner"></div> Connexion en cours...</div></div>
+    <div id="statusbar">
+      <span id="status-count">—</span>
+      <span id="status-path"></span>
+    </div>
+  </div>
+</div>
+
+<!-- FILE INPUT HIDDEN -->
+<input type="file" id="file-input" multiple style="display:none" onchange="uploadFiles(this.files)">
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const TENANT_ID   = '4a733ac3-5d70-484a-bf59-1e0e5991c368';
+const CLIENT_ID   = 'b4a11b8b-6e89-4c43-8dd4-ff33cb9cf32a';
+const SITE_URL    = 'https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL';
+const GRAPH_BASE  = 'https://graph.microsoft.com/v1.0';
+
+const msalConfig = {
+  auth: {
+    clientId: CLIENT_ID,
+    authority: `https://login.microsoftonline.com/${TENANT_ID}`,
+    redirectUri: window.location.origin,
+  },
+  cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
+};
+
+const scopes = ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'User.Read'];
+
+let msalInstance;
+
+async function initMsal() {
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+}
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let accessToken = null;
+let currentDriveId = null;
+let currentPath = []; // [{id, name}]
+let currentView = 'grid';
+let isContributor = false;
+let ctxTarget = null; // item under context menu
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+async function msalLogin() {
+  try {
+    await msalInstance.loginRedirect({ scopes });
+  } catch (e) {
+    console.error(e);
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+
+async function getToken() {
+  const accounts = msalInstance.getAllAccounts();
+  if (!accounts.length) return null;
+  try {
+    const result = await msalInstance.acquireTokenSilent({ scopes, account: accounts[0] });
+    return result.accessToken;
+  } catch {
+    await msalInstance.acquireTokenRedirect({ scopes });
+    return null;
+  }
+}
+
+async function afterLogin(account) {
+  accessToken = await getToken();
+  // User info
+  const name = account.name || account.username;
+  const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  document.getElementById('user-name').textContent = name;
+  document.getElementById('user-avatar').textContent = initials;
+  document.getElementById('login-screen').style.display = 'none';
+
+  // Check write permission (try to get site — if contributor, show buttons)
+  isContributor = true; // Graph ReadWrite granted = contributeur
+  if (isContributor) {
+    document.querySelectorAll('.contributor-only').forEach(el => el.style.display = '');
+  }
+
+  await loadSiteAndDrive();
+}
+
+function doLogout() {
+  if (!confirm('Se déconnecter ?')) return;
+  msalInstance.logoutPopup();
+}
+
+// ─── GRAPH HELPERS ────────────────────────────────────────────────────────────
+async function graphGet(url) {
+  const token = await getToken();
+  const res = await fetch(GRAPH_BASE + url, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error(`Graph error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function graphPost(url, body) {
+  const token = await getToken();
+  const res = await fetch(GRAPH_BASE + url, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Graph error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function graphDelete(url) {
+  const token = await getToken();
+  await fetch(GRAPH_BASE + url, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+}
+
+async function graphPut(url, data) {
+  const token = await getToken();
+  const res = await fetch(GRAPH_BASE + url, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+    body: data
+  });
+  if (!res.ok) throw new Error(`Graph error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+// ─── LOAD SITE + DRIVE ────────────────────────────────────────────────────────
+async function loadSiteAndDrive() {
+  showLoading();
+  try {
+    // Get site ID from URL
+    const siteHostname = 'novasystemfr.sharepoint.com';
+    const sitePath = '/sites/TESTSHAREPOINTEXCEL';
+    const siteData = await graphGet(`/sites/${siteHostname}:${sitePath}`);
+    const siteId = siteData.id;
+
+    // Get default drive
+    const driveData = await graphGet(`/sites/${siteId}/drive`);
+    currentDriveId = driveData.id;
+
+    // Load root
+    await navigateTo([]);
+    await loadTree();
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+async function navigateTo(path) {
+  currentPath = path;
+  updateSidebarActive();
+  renderBreadcrumb();
+  await loadCurrentFolder();
+}
+
+async function loadCurrentFolder(filter = '') {
+  showLoading();
+  try {
+    const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length - 1].id;
+    const data = await graphGet(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,@microsoft.graph.downloadUrl`);
+    const items = (data.value || []).filter(i =>
+      i.name.toLowerCase().includes(filter.toLowerCase())
+    );
+    renderContent(items);
+    const folders = items.filter(i => i.folder);
+    const files = items.filter(i => i.file);
+    document.getElementById('status-count').textContent = `${folders.length} dossier(s) · ${files.length} fichier(s)`;
+    document.getElementById('status-path').textContent = ['Documents', ...currentPath.map(p => p.name)].join(' › ');
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+// ─── TREE ─────────────────────────────────────────────────────────────────────
+async function loadTree() {
+  const root = document.getElementById('tree-root');
+  root.innerHTML = '';
+  try {
+    const data = await graphGet(`/drives/${currentDriveId}/root/children?$filter=folder ne null&$select=id,name,folder`);
+    buildTreeNodes(data.value || [], root, 0);
+  } catch (e) { console.error('Tree error:', e); }
+}
+
+function buildTreeNodes(items, container, depth) {
+  items.filter(i => i.folder).forEach(item => {
+    const wrapper = document.createElement('div');
+    const el = document.createElement('div');
+    el.className = `tree-item depth-${depth}`;
+    el.dataset.id = item.id;
+    el.dataset.name = item.name;
+
+    el.innerHTML = `
+      <svg class="tree-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.4"><polyline points="9 18 15 12 9 6"/></svg>
+      ${folderIconSmall()}
+      <span style="overflow:hidden;text-overflow:ellipsis">${item.name}</span>`;
+
+    const childContainer = document.createElement('div');
+    childContainer.className = 'tree-children';
+
+    el.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      // Navigate
+      const newPath = [...currentPath];
+      // Find path to this item
+      await navigateTo(buildPathTo(item));
+
+      // Lazy load children
+      if (!childContainer.dataset.loaded) {
+        childContainer.dataset.loaded = '1';
+        try {
+          const data = await graphGet(`/drives/${currentDriveId}/items/${item.id}/children?$filter=folder ne null&$select=id,name,folder`);
+          if (data.value && data.value.length) {
+            buildTreeNodes(data.value, childContainer, depth + 1);
+            const svg = el.querySelector('.tree-toggle');
+            if (svg) svg.style.opacity = '1';
+          }
+        } catch {}
+      }
+      childContainer.classList.toggle('open');
+      const svg = el.querySelector('.tree-toggle');
+      if (svg) svg.classList.toggle('open');
+    });
+
+    wrapper.appendChild(el);
+    wrapper.appendChild(childContainer);
+    container.appendChild(wrapper);
+  });
+}
+
+function buildPathTo(item) {
+  // For top-level items from the tree
+  return [{ id: item.id, name: item.name }];
+}
+
+function updateSidebarActive() {
+  document.querySelectorAll('.tree-item').forEach(el => el.classList.remove('active'));
+  if (currentPath.length > 0) {
+    const current = currentPath[currentPath.length - 1];
+    document.querySelectorAll('.tree-item').forEach(el => {
+      if (el.dataset.id === current.id) el.classList.add('active');
+    });
+  }
+}
+
+// ─── BREADCRUMB ───────────────────────────────────────────────────────────────
+function renderBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  bc.innerHTML = '';
+  const root = document.createElement('span');
+  root.className = 'bc-item';
+  root.textContent = '🏠 Documents';
+  root.onclick = () => navigateTo([]);
+  bc.appendChild(root);
+  currentPath.forEach((folder, i) => {
+    const sep = document.createElement('span');
+    sep.className = 'bc-sep'; sep.textContent = ' › ';
+    bc.appendChild(sep);
+    const item = document.createElement('span');
+    item.className = i === currentPath.length - 1 ? 'bc-item current' : 'bc-item';
+    item.textContent = folder.name;
+    if (i < currentPath.length - 1) {
+      item.onclick = () => navigateTo(currentPath.slice(0, i + 1));
+    }
+    bc.appendChild(item);
+  });
+}
+
+// ─── RENDER CONTENT ───────────────────────────────────────────────────────────
+function renderContent(items) {
+  const content = document.getElementById('content');
+  if (!items.length) {
+    content.innerHTML = `<div class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <p>Ce dossier est vide</p>
+    </div>`;
+    return;
+  }
+  if (currentView === 'grid') {
+    content.innerHTML = `<div class="grid-view">${items.map(gridItemHTML).join('')}</div>`;
+  } else {
+    content.innerHTML = `<table class="list-view">
+      <thead><tr><th>Nom</th><th>Modifié</th><th>Taille</th></tr></thead>
+      <tbody>${items.map(listItemHTML).join('')}</tbody>
+    </table>`;
+  }
+  // Click events
+  content.querySelectorAll('[data-item-id]').forEach(el => {
+    el.addEventListener('click', () => handleItemClick(el.dataset.itemId, el.dataset.itemName, el.dataset.itemType, el.dataset.itemUrl, el.dataset.siteUrl, el.dataset.parentPath));
+    el.addEventListener('contextmenu', (e) => showCtxMenu(e, el.dataset.itemId, el.dataset.itemName, el.dataset.itemType, el.dataset.itemUrl));
+  });
+}
+
+function gridItemHTML(item) {
+  const isFolder = !!item.folder;
+  const ext = isFolder ? '' : (item.name.split('.').pop() || '').toLowerCase();
+  const icon = isFolder ? folderIcon(52) : fileIcon(ext, 52);
+  const siteUrl = item.parentReference ? item.parentReference.siteUrl || '' : '';
+  const parentPath = item.parentReference ? item.parentReference.path || '' : '';
+  return `<div class="grid-item"
+    data-item-id="${item.id}"
+    data-item-name="${item.name}"
+    data-item-type="${isFolder ? 'folder' : 'file'}"
+    data-item-url="${item.webUrl || ''}"
+    data-site-url="${siteUrl}"
+    data-parent-path="${parentPath.replace('/drive/root:', '')}">
+    ${icon}
+    <span class="item-name">${item.name}</span>
+  </div>`;
+}
+
+function listItemHTML(item) {
+  const isFolder = !!item.folder;
+  const ext = isFolder ? '' : (item.name.split('.').pop() || '').toLowerCase();
+  const icon = isFolder ? folderIconSmall() : fileIconSmall(ext);
+  const date = item.lastModifiedDateTime ? new Date(item.lastModifiedDateTime).toLocaleDateString('fr-FR') : '—';
+  const size = isFolder ? '—' : formatSize(item.size);
+  const siteUrlL = item.parentReference ? item.parentReference.siteUrl || '' : '';
+  const parentPathL = item.parentReference ? (item.parentReference.path || '').replace('/drive/root:', '') : '';
+  return `<tr data-item-id="${item.id}"
+    data-item-name="${item.name}"
+    data-item-type="${isFolder ? 'folder' : 'file'}"
+    data-item-url="${item.webUrl || ''}"
+    data-site-url="${siteUrlL}"
+    data-parent-path="${parentPathL}">
+    <td><div class="file-row-name">${icon} ${item.name}</div></td>
+    <td class="muted">${date}</td>
+    <td class="muted">${size}</td>
+  </tr>`;
+}
+
+async function handleItemClick(id, name, type, url, siteUrl, parentPath) {
+  if (type === 'folder') {
+    await navigateTo([...currentPath, { id, name }]);
+  } else {
+    openFileDesktop(name, url, siteUrl, parentPath);
+  }
+}
+
+function openFileDesktop(name, url, siteUrl, parentPath) {
+  const ext = name.split(".").pop().toLowerCase();
+  const protocols = {
+    doc: "ms-word", docx: "ms-word", docm: "ms-word",
+    xls: "ms-excel", xlsx: "ms-excel", xlsm: "ms-excel", xlsb: "ms-excel",
+    ppt: "ms-powerpoint", pptx: "ms-powerpoint", pptm: "ms-powerpoint",
+    vsd: "ms-visio", vsdx: "ms-visio",
+    one: "onenote",
+  };
+  const protocol = protocols[ext];
+  if (protocol) {
+    // parentPath ex: /drives/.../root:/compta1 -> extraire le chemin apres root:
+    let directUrl;
+    if (parentPath && parentPath.includes('root:')) {
+      const relativePath = parentPath.split('root:')[1]; // ex: /compta1
+      directUrl = 'https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/Documents' + relativePath + '/' + encodeURIComponent(name);
+    } else {
+      directUrl = url.split('?')[0];
+    }
+    window.location.href = protocol + ':ofe|u|' + directUrl;
+  } else {
+    window.open(url, '_blank');
+  }
+}
+
+// ─── CONTEXT MENU ─────────────────────────────────────────────────────────────
+function showCtxMenu(e, id, name, type, url) {
+  e.preventDefault();
+  ctxTarget = { id, name, type, url };
+  const menu = document.getElementById('ctx-menu');
+  menu.style.display = 'block';
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  // Hide download for folders
+  menu.querySelectorAll('.ctx-item')[0].style.display = type === 'file' ? '' : 'none';
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('ctx-menu').style.display = 'none';
+});
+
+async function ctxDownload() {
+  if (!ctxTarget || ctxTarget.type !== 'file') return;
+  try {
+    const data = await graphGet(`/drives/${currentDriveId}/items/${ctxTarget.id}?$select=@microsoft.graph.downloadUrl`);
+    const dlUrl = data['@microsoft.graph.downloadUrl'];
+    if (dlUrl) { const a = document.createElement('a'); a.href = dlUrl; a.download = ctxTarget.name; a.click(); }
+  } catch (e) { alert('Erreur téléchargement : ' + e.message); }
+}
+
+function ctxOpen() {
+  if (!ctxTarget) return;
+  window.open(ctxTarget.url, '_blank');
+}
+
+async function ctxDelete() {
+  if (!ctxTarget) return;
+  if (!confirm(`Supprimer "${ctxTarget.name}" ?`)) return;
+  try {
+    await graphDelete(`/drives/${currentDriveId}/items/${ctxTarget.id}`);
+    await loadCurrentFolder();
+    await loadTree();
+  } catch (e) { alert('Erreur suppression : ' + e.message); }
+}
+
+// ─── UPLOAD ───────────────────────────────────────────────────────────────────
+function triggerUpload() { document.getElementById('file-input').click(); }
+
+async function uploadFiles(files) {
+  if (!files.length) return;
+  const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length - 1].id;
+  showLoading('Upload en cours...');
+  try {
+    for (const file of files) {
+      const token = await getToken();
+      // Simple upload for files < 4MB
+      await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/items/${folderId}:/${encodeURIComponent(file.name)}:/content`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': file.type || 'application/octet-stream' },
+        body: file
+      });
+    }
+    await loadCurrentFolder();
+  } catch (e) { alert('Erreur upload : ' + e.message); }
+}
+
+// Drag & drop
+document.addEventListener('dragover', e => { if (!isContributor) return; e.preventDefault(); document.getElementById('upload-overlay').classList.add('active'); });
+document.addEventListener('dragleave', e => { if (e.clientX === 0 && e.clientY === 0) document.getElementById('upload-overlay').classList.remove('active'); });
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  document.getElementById('upload-overlay').classList.remove('active');
+  if (!isContributor) return;
+  uploadFiles(e.dataTransfer.files);
+});
+
+// ─── NEW FOLDER ───────────────────────────────────────────────────────────────
+async function createNewFolder() {
+  const name = prompt('Nom du nouveau dossier :');
+  if (!name) return;
+  const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length - 1].id;
+  try {
+    await graphPost(`/drives/${currentDriveId}/items/${folderId}/children`, {
+      name, folder: {}, '@microsoft.graph.conflictBehavior': 'rename'
+    });
+    await loadCurrentFolder();
+    await loadTree();
+  } catch (e) { alert('Erreur création dossier : ' + e.message); }
+}
+
+// ─── VIEW ─────────────────────────────────────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.getElementById('view-grid').classList.toggle('active', v === 'grid');
+  document.getElementById('view-list').classList.toggle('active', v === 'list');
+  loadCurrentFolder(document.getElementById('search-input').value);
+}
+
+function filterItems(val) { loadCurrentFolder(val); }
+
+// ─── UI HELPERS ───────────────────────────────────────────────────────────────
+function showLoading(msg = 'Chargement...') {
+  document.getElementById('content').innerHTML = `<div class="loading"><div class="spinner"></div> ${msg}</div>`;
+}
+
+function showError(msg) {
+  document.getElementById('content').innerHTML = `<div class="empty-state">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="1"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <p style="color:#e74c3c">${msg}</p>
+    <p style="font-size:12px">Vérifie les permissions Azure AD et le consentement administrateur</p>
+  </div>`;
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '—';
+  if (bytes < 1024) return bytes + ' o';
+  if (bytes < 1048576) return Math.round(bytes / 1024) + ' Ko';
+  return (bytes / 1048576).toFixed(1) + ' Mo';
+}
+
+// ─── ICONS ────────────────────────────────────────────────────────────────────
+function folderIcon(size = 48) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 48 48" fill="none">
+    <path d="M2 16C2 14.3 3.3 13 5 13h15l4 5H43c1.7 0 3 1.3 3 3v19c0 1.7-1.3 3-3 3H5c-1.7 0-3-1.3-3-3V16z" fill="#f5a623"/>
+    <rect x="2" y="18" width="44" height="25" rx="2" fill="#f5a623" opacity="0.7"/>
+  </svg>`;
+}
+
+function fileIcon(ext, size = 48) {
+  const colors = { pdf:'#e74c3c', docx:'#2980b9', doc:'#2980b9', xlsx:'#27ae60', xls:'#27ae60', ps1:'#8e44ad', pptx:'#e67e22', ppt:'#e67e22', vsdx:'#1abc9c', png:'#3498db', jpg:'#3498db', zip:'#95a5a6', default:'#7f8c8d' };
+  const c = colors[ext] || colors.default;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 48 48" fill="none">
+    <rect x="8" y="2" width="28" height="36" rx="3" fill="${c}" opacity="0.15"/>
+    <rect x="8" y="2" width="28" height="36" rx="3" stroke="${c}" stroke-width="1.5"/>
+    <path d="M28 2v10h8" stroke="${c}" stroke-width="1.5" fill="none"/>
+    <rect x="12" y="28" width="24" height="14" rx="2" fill="${c}"/>
+    <text x="24" y="38" text-anchor="middle" fill="white" font-size="7" font-weight="600" font-family="monospace">${ext.substring(0,4).toUpperCase()}</text>
+    <line x1="13" y1="18" x2="35" y2="18" stroke="${c}" stroke-width="1.5" opacity="0.5"/>
+    <line x1="13" y1="22" x2="30" y2="22" stroke="${c}" stroke-width="1.5" opacity="0.5"/>
+  </svg>`;
+}
+
+function folderIconSmall() {
+  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f5a623" stroke-width="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
+}
+
+function fileIconSmall(ext) {
+  const colors = { pdf:'#e74c3c', docx:'#2980b9', doc:'#2980b9', xlsx:'#27ae60', ps1:'#8e44ad', pptx:'#e67e22', default:'#7f8c8d' };
+  const c = colors[ext] || colors.default;
+  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    await initMsal();
+    const result = await msalInstance.handleRedirectPromise();
+    if (result) await afterLogin(result.account);
+    else {
+      const accounts = msalInstance.getAllAccounts();
+      if (accounts.length) await afterLogin(accounts[0]);
+    }
+  } catch (e) { console.error(e); }
+})();
+</script>
+</body>
+</html>
