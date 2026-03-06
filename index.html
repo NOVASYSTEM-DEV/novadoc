@@ -533,7 +533,7 @@ function getItemData(item) {
 }
 
 function gridItemHTML(item) {
-  const { isFolder, parentPath } = getItemData(item);
+  const { isFolder, parentPath, createdBy } = getItemData(item);
   const ext = isFolder ? '' : (item.name.split('.').pop()||'').toLowerCase();
   const icon = isFolder ? folderIcon(52) : fileIcon(ext, 52);
   return `<div class="grid-item" draggable="true"
