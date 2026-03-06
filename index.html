@@ -646,15 +646,16 @@ function attachItemEvents(content, items) {
       });
     }
 
-    // Click normal - ouvrir
+    // Simple clic -> sélection / Double clic -> ouvrir
     el.addEventListener('click', e => {
-      const { id, name, type, url } = el.dataset;
-      // Ignorer si clic sur checkbox
       if (e.target.dataset.check || e.target.closest('[data-check]')) return;
-      if (e.ctrlKey || e.metaKey) {
-        toggleSelection(el, { id, name, type });
-        return;
-      }
+      const { id, name, type } = el.dataset;
+      toggleSelection(el, { id, name, type });
+    });
+    el.addEventListener('dblclick', e => {
+      if (e.target.dataset.check || e.target.closest('[data-check]')) return;
+      const { id, name, type, url } = el.dataset;
+      clearSelection();
       if (type==='folder') navigateTo([...currentPath, {id, name}]);
       else openFileLocal(name, url, el.dataset.parentPath);
     });
@@ -739,6 +740,13 @@ function showCtxMenu(e, type) {
 }
 
 document.addEventListener('click', () => { document.getElementById('ctx-menu').style.display='none'; });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    clearSelection();
+    document.getElementById('ctx-menu').style.display = 'none';
+    document.getElementById('new-menu')?.classList.remove('open');
+  }
+});
 
 function ctxOpenLocal() { if(ctxTarget) openFileLocal(ctxTarget.name, ctxTarget.url, ctxTarget.parentPath); }
 
