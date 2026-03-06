@@ -152,8 +152,23 @@
   .move-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-light)}
 
   /* SÉLECTION MULTIPLE */
+  .grid-item{position:relative}
+  .grid-item .item-checkbox{
+    position:absolute;top:6px;left:6px;width:18px;height:18px;
+    border:2px solid var(--border);border-radius:4px;background:white;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;
+    opacity:0;transition:opacity 0.15s;z-index:2;flex-shrink:0;
+  }
+  .grid-item:hover .item-checkbox{opacity:1}
+  .grid-item.selected .item-checkbox{opacity:1;background:var(--accent);border-color:var(--accent)}
+  .grid-item.selected .item-checkbox::after{content:'✓';color:white;font-size:11px;font-weight:700}
   .grid-item.selected{background:var(--accent-light);border-color:var(--accent)!important;outline:2px solid var(--accent)}
-  .list-view tbody tr.selected{background:var(--accent-light);outline:2px solid var(--accent)}
+  
+  /* Checkbox vue liste */
+  .list-check-cell{width:36px;padding:0 8px!important}
+  .list-checkbox{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
+  .list-view tbody tr.selected{background:var(--accent-light)}
+  .list-view tbody tr.selected td{background:var(--accent-light)}
   #selection-bar{display:none;position:fixed;bottom:48px;left:50%;transform:translateX(-50%);
     background:var(--sidebar-bg);color:white;border-radius:12px;padding:10px 20px;
     gap:8px;align-items:center;z-index:400;box-shadow:0 4px 20px rgba(0,0,0,0.3);
@@ -558,9 +573,23 @@ function renderContent(items) {
   if (currentView==='grid') {
     content.innerHTML = `<div class="grid-view">${items.map(gridItemHTML).join('')}</div>`;
   } else {
-    content.innerHTML = `<table class="list-view"><thead><tr><th>Nom</th><th>Modifié</th><th>Taille</th></tr></thead><tbody>${items.map(listItemHTML).join('')}</tbody></table>`;
+    content.innerHTML = `<table class="list-view"><thead><tr><th class="list-check-cell"><input type="checkbox" class="list-checkbox" id="check-all" title="Tout sélectionner"></th><th>Nom</th><th>Modifié</th><th>Taille</th></tr></thead><tbody>${items.map(listItemHTML).join('')}</tbody></table>`;
   }
   attachItemEvents(content, items);
+  // Checkbox "tout sélectionner" en vue liste
+  const checkAll = content.querySelector('#check-all');
+  if (checkAll) {
+    checkAll.addEventListener('change', () => {
+      content.querySelectorAll('[data-id]').forEach(el => {
+        const { id, name, type } = el.dataset;
+        const already = selectedItems.some(s=>s.id===id);
+        if (checkAll.checked && !already) toggleSelection(el, {id,name,type});
+        else if (!checkAll.checked && already) toggleSelection(el, {id,name,type});
+        const cb = el.querySelector('.list-checkbox');
+        if (cb) cb.checked = checkAll.checked;
+      });
+    });
+  }
 }
 
 function getItemData(item) {
@@ -580,6 +609,7 @@ function gridItemHTML(item) {
     data-url="${item.webUrl||''}"
     data-parent-path="${parentPath}"
     data-created-by="${createdBy}">
+    <div class="item-checkbox" data-check="1"></div>
     ${icon}<span class="item-name">${item.name}</span>
   </div>`;
 }
@@ -596,6 +626,7 @@ function listItemHTML(item) {
     data-url="${item.webUrl||''}"
     data-parent-path="${parentPath}"
     data-created-by="${createdBy}">
+    <td class="list-check-cell"><input type="checkbox" class="list-checkbox" data-check="1"></td>
     <td><div class="file-row-name">${icon} ${item.name}</div></td>
     <td class="muted">${date}</td>
     <td class="muted">${size}</td>
@@ -604,11 +635,23 @@ function listItemHTML(item) {
 
 function attachItemEvents(content, items) {
   content.querySelectorAll('[data-id]').forEach(el => {
-    // Click avec Ctrl/Shift pour sélection multiple
+    // Clic sur checkbox
+    const checkEl = el.querySelector('[data-check]');
+    if (checkEl) {
+      checkEl.addEventListener('click', e => {
+        e.stopPropagation();
+        const { id, name, type } = el.dataset;
+        toggleSelection(el, { id, name, type });
+        if (checkEl.tagName === 'INPUT') checkEl.checked = selectedItems.some(s=>s.id===id);
+      });
+    }
+
+    // Click normal - ouvrir
     el.addEventListener('click', e => {
       const { id, name, type, url } = el.dataset;
-      if (e.ctrlKey || e.metaKey || e.shiftKey) {
-        e.preventDefault();
+      // Ignorer si clic sur checkbox
+      if (e.target.dataset.check || e.target.closest('[data-check]')) return;
+      if (e.ctrlKey || e.metaKey) {
         toggleSelection(el, { id, name, type });
         return;
       }
@@ -863,12 +906,18 @@ function toggleSelection(el, item) {
     selectedItems.push(item);
     el.classList.add('selected');
   }
+  // Sync checkbox input si vue liste
+  const cb = el.querySelector('.list-checkbox');
+  if (cb) cb.checked = idx < 0; // idx<0 = vient d'être ajouté
   updateSelectionBar();
 }
 
 function clearSelection() {
   selectedItems = [];
   document.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll('.list-checkbox').forEach(cb => cb.checked = false);
+  const ca = document.getElementById('check-all');
+  if (ca) ca.checked = false;
   updateSelectionBar();
 }
 
