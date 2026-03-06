@@ -1,0 +1,24 @@
+le menu nouveau fonctionne, mais juste pour le fichier excel, je ne peux pas l'ouvrir
+
+
+cd C:\deploy
+git add . && git commit -m "fix: supprimer ouverture auto apres creation" && git push
+
+
+
+
+
+
+1. Copie ou deplacer, fichier ou dossier, ne fonctionne pas.
+2. Sur un fichier, seul le créateur peut modifier les informations du fichier, du genre mettre un mot de passe sur le fichier.
+3. Bloquer l'enregistrer sous.
+4. Sur le mail de partage reçu, il y a 3 liens, dont 2 sont le SharePoint. il faut un seul lien et vers novadoc.
+5. On ne peut pas partager de dossier.
+6. Sur fichier et dossier, supprimer ouvrir dans SharePoint.
+7. Activer le versionning, accessible en clic-droit sur le fichier ou dossier.
+8. Mettre une corbeille.
+9. Autoriser la suppression que par le createur du fichier ou dossier.
+
+
+
+

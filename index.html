@@ -186,10 +186,6 @@
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     Télécharger
   </div>
-  <div class="ctx-item" onclick="ctxOpen()">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-    Ouvrir dans SharePoint
-  </div>
   <div class="ctx-sep"></div>
   <div class="ctx-item" onclick="ctxShare()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
@@ -200,9 +196,14 @@
     Renommer
   </div>
   <div class="ctx-sep"></div>
-  <div class="ctx-item danger contributor-only" onclick="ctxDelete()" style="display:none">
+  <div class="ctx-item contributor-only" onclick="ctxVersions()" style="display:none" id="ctx-versions">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4"/><polyline points="3 16 3 11 8 11"/></svg>
+    Historique des versions
+  </div>
+  <div class="ctx-sep contributor-only" style="display:none" id="ctx-sep-del"></div>
+  <div class="ctx-item danger contributor-only" onclick="ctxDelete()" style="display:none" id="ctx-delete">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-    Supprimer
+    Mettre à la corbeille
   </div>
 </div>
 
@@ -312,6 +313,7 @@
           </div>
         </div>
       </div>
+      <button class="toolbar-btn" id="trash-btn" onclick="showTrash()">🗑 Corbeille</button>
       <div class="toolbar-spacer"></div>
       <div class="view-toggle">
         <button class="view-btn active" id="view-grid" onclick="setView('grid')" title="Vignettes">
@@ -433,7 +435,7 @@ async function loadCurrentFolder(filter='') {
   showLoading();
   try {
     const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length-1].id;
-    const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference`);
+    const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
     renderContent(items);
     const folders = items.filter(i=>i.folder), files = items.filter(i=>i.file);
@@ -526,7 +528,8 @@ function renderContent(items) {
 function getItemData(item) {
   const isFolder = !!item.folder;
   const parentPath = item.parentReference ? (item.parentReference.path||'').replace('/drive/root:','') : '';
-  return { isFolder, parentPath };
+  const createdBy = item.createdBy ? (item.createdBy.user ? item.createdBy.user.email || item.createdBy.user.displayName || '' : '') : '';
+  return { isFolder, parentPath, createdBy };
 }
 
 function gridItemHTML(item) {
@@ -537,7 +540,8 @@ function gridItemHTML(item) {
     data-id="${item.id}" data-name="${item.name}"
     data-type="${isFolder?'folder':'file'}"
     data-url="${item.webUrl||''}"
-    data-parent-path="${parentPath}">
+    data-parent-path="${parentPath}"
+    data-created-by="${createdBy}">
     ${icon}<span class="item-name">${item.name}</span>
   </div>`;
 }
@@ -552,7 +556,8 @@ function listItemHTML(item) {
     data-id="${item.id}" data-name="${item.name}"
     data-type="${isFolder?'folder':'file'}"
     data-url="${item.webUrl||''}"
-    data-parent-path="${parentPath}">
+    data-parent-path="${parentPath}"
+    data-created-by="${createdBy}">
     <td><div class="file-row-name">${icon} ${item.name}</div></td>
     <td class="muted">${date}</td>
     <td class="muted">${size}</td>
@@ -571,7 +576,7 @@ function attachItemEvents(content, items) {
     el.addEventListener('contextmenu', e => {
       e.preventDefault();
       const { id, name, type, url } = el.dataset;
-      ctxTarget = { id, name, type, url, parentPath: el.dataset.parentPath };
+      ctxTarget = { id, name, type, url, parentPath: el.dataset.parentPath, createdBy: el.dataset.createdBy||'' };
       showCtxMenu(e, type);
     });
     // Drag start
@@ -631,10 +636,20 @@ function showCtxMenu(e, type) {
   const menu = document.getElementById('ctx-menu');
   document.getElementById('ctx-open-local').style.display = type==='file' ? '' : 'none';
   document.getElementById('ctx-download').style.display = type==='file' ? '' : 'none';
+  // Versions disponibles pour fichiers seulement
+  const versionsEl = document.getElementById('ctx-versions');
+  const sepDelEl = document.getElementById('ctx-sep-del');
+  const deleteEl = document.getElementById('ctx-delete');
+  if (versionsEl) versionsEl.style.display = isContributor && type==='file' ? '' : 'none';
+  if (sepDelEl) sepDelEl.style.display = isContributor ? '' : 'none';
+  // Suppression: seulement si créateur ou si createdBy vide (fallback)
+  const currentUser = document.getElementById('user-name').textContent;
+  const isCreator = !ctxTarget.createdBy || ctxTarget.createdBy === currentUser || 
+                    ctxTarget.createdBy.toLowerCase().includes(currentUser.toLowerCase().split(' ')[0]);
+  if (deleteEl) deleteEl.style.display = isContributor && isCreator ? '' : 'none';
   menu.style.display = 'block';
-  // Keep in viewport
-  const x = Math.min(e.clientX, window.innerWidth-210);
-  const y = Math.min(e.clientY, window.innerHeight-250);
+  const x = Math.min(e.clientX, window.innerWidth-220);
+  const y = Math.min(e.clientY, window.innerHeight-300);
   menu.style.left = x+'px'; menu.style.top = y+'px';
 }
 
@@ -694,30 +709,46 @@ async function doShare() {
   btn.textContent = 'Envoi...';
 
   try {
-    // Créer le lien de partage SharePoint
-    const linkData = await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}/createLink`, 'POST', {
-      type: role === 'write' ? 'edit' : 'view',
-      scope: 'organization'
-    });
-    const shareLink = linkData.link.webUrl;
-    
-    // Construire le lien NovaDoc
     const novadocLink = APP_URL;
-    
-    // Inviter chaque destinataire via Graph API permission
+    const customMsg = message 
+      ? `${message}\n\nConnectez-vous sur NovaDoc : ${novadocLink}` 
+      : `Vous avez été invité(e) à accéder à "${ctxTarget.name}".\n\nConnectez-vous sur NovaDoc : ${novadocLink}`;
+    // Inviter via Graph (envoie un seul email Microsoft sans lien SharePoint superflu)
     for (const email of emails) {
       await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}/invite`, 'POST', {
         requireSignIn: true,
         sendInvitation: true,
         roles: [role === 'write' ? 'write' : 'read'],
         recipients: [{ email }],
-        message: message || `Vous avez accès à "${ctxTarget.name}" via NovaDoc. Connectez-vous sur : ${novadocLink}`
+        message: customMsg
       });
     }
     closeShareModal();
-    alert(`✅ Invitation envoyée à : ${emails.join(', ')}\n\nLes destinataires recevront un email avec le lien vers NovaDoc.`);
+    alert(`✅ Invitation envoyée à : ${emails.join(', ')}`);
   } catch(e) {
-    alert('Erreur partage: '+e.message);
+    // Fallback si invite API échoue (ex: limitedAccess) - envoyer via Mail Graph
+    try {
+      const novadocLink = APP_URL;
+      const token = await getToken();
+      for (const email of emails) {
+        const mailBody = {
+          message: {
+            subject: `Partage NovaDoc : ${ctxTarget.name}`,
+            body: { contentType: 'HTML', content: `<p>Bonjour,</p><p>${message || 'Un document a été partagé avec vous.'}</p><p>Accédez à NovaDoc : <a href="${novadocLink}">${novadocLink}</a></p><p>Droits : ${role === 'write' ? 'Lecture et modification' : 'Lecture seule'}</p>` },
+            toRecipients: [{ emailAddress: { address: email } }]
+          }
+        };
+        await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(mailBody)
+        });
+      }
+      closeShareModal();
+      alert(`✅ Email envoyé à : ${emails.join(', ')}`);
+    } catch(e2) {
+      alert('Erreur partage: '+e2.message);
+    }
   } finally {
     btn.textContent = "Envoyer l'invitation";
   }
@@ -736,22 +767,30 @@ function closeMoveModal() {
 }
 
 async function doMoveOrCopy(action) {
-  if (!dragSource || !moveTarget) return;
+  if (!dragSource || !moveTarget || !moveTarget.id) { alert('Erreur: destination invalide'); return; }
+  const srcId = dragSource.id;
+  const srcName = dragSource.name;
+  const destId = moveTarget.id;
   closeMoveModal();
   showLoading(action==='move' ? 'Déplacement...' : 'Copie...');
   try {
-    const destRef = { driveId: currentDriveId, id: moveTarget.id };
+    const destRef = { driveId: currentDriveId, id: destId };
     if (action==='move') {
-      await graphCall(`/drives/${currentDriveId}/items/${dragSource.id}`, 'PATCH', { parentReference: destRef });
+      await graphCall(`/drives/${currentDriveId}/items/${srcId}`, 'PATCH', { parentReference: destRef });
     } else {
-      await graphCall(`/drives/${currentDriveId}/items/${dragSource.id}/copy`, 'POST', {
-        parentReference: destRef,
-        name: dragSource.name
+      // copy est asynchrone - on attend juste la confirmation
+      const res = await fetch(`https://graph.microsoft.com/v1.0/drives/${currentDriveId}/items/${srcId}/copy`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${await getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentReference: destRef, name: srcName })
       });
+      if (!res.ok) throw new Error(await res.text());
+      // Attendre un peu pour la copie async
+      await new Promise(r => setTimeout(r, 1500));
     }
     await loadCurrentFolder();
     await loadTree();
-  } catch(e) { alert('Erreur: '+e.message); showError(e.message); }
+  } catch(e) { alert('Erreur déplacer/copier: '+e.message); await loadCurrentFolder(); }
 }
 
 // ─── NOUVEAU FICHIER ──────────────────────────────────────────────────────────
