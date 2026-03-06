@@ -483,7 +483,7 @@ async function navigateTo(path) {
   renderBreadcrumb();
   await loadCurrentFolder();
   // Déplier l'arborescence automatiquement
-  if (path.length > 0) expandTreeTo(path);
+  if (path.length > 0) expandTreeTo(path).catch(()=>{});
 }
 
 async function expandTreeTo(path) {
@@ -613,10 +613,7 @@ function buildTreeNodes(items, container, depth) {
   });
 }
 
-function buildPathTo(item) { return [...currentPath.filter((_,i)=>i<currentPath.length), { id: item.id, name: item.name }]; }
-
-// Simplified: just return single item path for tree clicks
-function buildPathTo(item) { return [{ id: item.id, name: item.name }]; }
+function buildPathTo(item) { return [...currentPath, { id: item.id, name: item.name }]; }
 
 function updateSidebarActive() {
   document.querySelectorAll('.tree-item').forEach(el=>el.classList.remove('active'));
