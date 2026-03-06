@@ -1217,7 +1217,53 @@ async function doMoveOrCopy(action) {
     }
     await loadCurrentFolder();
     await loadTree();
-  } catch(e) { alert('Erreur déplacer/copier: '+e.message); await loadCurrentFolder(); }
+  } catch(e) {
+    if (e.message && e.message.includes('nameAlreadyExists')) {
+      const choice = confirm(`Un élément nommé "${srcName}" existe déjà dans "${moveTarget?.name || 'la destination'}".
+
+Cliquez OK pour écraser, ou Annuler pour renommer automatiquement.`);
+      try {
+        const destRef = { driveId: currentDriveId, id: destId };
+        if (choice) {
+          // Écraser : trouver et supprimer l'existant d'abord
+          const existing = await graphCall(`/drives/${currentDriveId}/items/${destId}:/${encodeURIComponent(srcName)}`);
+          await graphCall(`/drives/${currentDriveId}/items/${existing.id}`, 'DELETE');
+          if (action === 'move') {
+            await graphCall(`/drives/${currentDriveId}/items/${srcId}`, 'PATCH', { parentReference: destRef });
+          } else {
+            const res = await fetch(`https://graph.microsoft.com/v1.0/drives/${currentDriveId}/items/${srcId}/copy`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${await getToken()}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ parentReference: destRef, name: srcName })
+            });
+            if (!res.ok) throw new Error(await res.text());
+            await new Promise(r => setTimeout(r, 1500));
+          }
+        } else {
+          // Renommer automatiquement : ajouter timestamp
+          const ext = srcName.includes('.') ? '.'+srcName.split('.').pop() : '';
+          const base = ext ? srcName.slice(0, -ext.length) : srcName;
+          const newName = `${base}_${new Date().toISOString().slice(11,19).replace(/:/g,'')}${ext}`;
+          if (action === 'move') {
+            await graphCall(`/drives/${currentDriveId}/items/${srcId}`, 'PATCH', { parentReference: destRef, name: newName });
+          } else {
+            const res = await fetch(`https://graph.microsoft.com/v1.0/drives/${currentDriveId}/items/${srcId}/copy`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${await getToken()}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ parentReference: destRef, name: newName })
+            });
+            if (!res.ok) throw new Error(await res.text());
+            await new Promise(r => setTimeout(r, 1500));
+          }
+        }
+        await loadCurrentFolder();
+        await loadTree();
+      } catch(e2) { alert('Erreur: '+e2.message); await loadCurrentFolder(); }
+    } else {
+      alert('Erreur: '+e.message);
+      await loadCurrentFolder();
+    }
+  }
 }
 
 // ─── NOUVEAU FICHIER ──────────────────────────────────────────────────────────
