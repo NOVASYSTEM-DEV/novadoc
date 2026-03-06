@@ -690,15 +690,31 @@ async function ctxVersions() {
     if (!choice) return;
     const idx = parseInt(choice) - 1;
     if (isNaN(idx) || idx < 0 || idx >= versions.length) { alert('Numéro invalide.'); return; }
-    if (idx === 0) { alert('C\'est déjà la version actuelle.'); return; }
     const versionId = versions[idx].id;
-    if (!confirm(`Restaurer la version ${choice} (${lines[idx]}) ?`)) return;
+    const baseName = ctxTarget.name.replace(/\.[^.]+$/, '');
+    const ext = ctxTarget.name.includes('.') ? ctxTarget.name.split('.').pop() : '';
+    const defaultName = `${baseName}_v${versions.length - idx}${ext ? '.'+ext : ''}`;
+    const newName = prompt(`Nom du fichier restauré :`, defaultName);
+    if (!newName) return;
+    if (!confirm(`Créer "${newName}" depuis la version ${choice} ?`)) return;
+    showLoading('Restauration en cours...');
     const token = await getToken();
-    await fetch(`https://graph.microsoft.com/v1.0/drives/${currentDriveId}/items/${ctxTarget.id}/versions/${versionId}/restoreVersion`, {
-      method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+    // Télécharger le contenu de la version
+    const dlRes = await fetch(`https://graph.microsoft.com/v1.0/drives/${currentDriveId}/items/${ctxTarget.id}/versions/${versionId}/content`, {
+      headers: { 'Authorization': `Bearer ${token}` }
     });
+    if (!dlRes.ok) throw new Error('Impossible de télécharger la version: ' + dlRes.status);
+    const blob = await dlRes.blob();
+    // Re-uploader sous le nouveau nom dans le même dossier
+    const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length-1].id;
+    const upRes = await fetch(`https://graph.microsoft.com/v1.0/drives/${currentDriveId}/items/${folderId}:/${encodeURIComponent(newName)}:/content`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': blob.type || 'application/octet-stream' },
+      body: blob
+    });
+    if (!upRes.ok) throw new Error('Erreur upload: ' + await upRes.text());
     await loadCurrentFolder();
-    alert('✅ Version restaurée.');
+    alert(`✅ Version restaurée sous le nom "${newName}".`);
   } catch(e) { alert('Erreur versions: '+e.message); }
 }
 
