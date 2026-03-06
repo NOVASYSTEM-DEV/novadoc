@@ -594,18 +594,28 @@ function buildTreeNodes(items, container, depth) {
       showMoveModal();
     });
 
+    // Clic simple = déplier, double clic = naviguer
+    let clickTimer = null;
     el.addEventListener('click', async e => {
       e.stopPropagation();
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; return; }
+      clickTimer = setTimeout(async () => {
+        clickTimer = null;
+        if (!childContainer.dataset.loaded) {
+          childContainer.dataset.loaded = '1';
+          try {
+            const d = await graphCall(`/drives/${currentDriveId}/items/${item.id}/children?$filter=folder ne null&$select=id,name,folder`);
+            if (d.value&&d.value.length) { buildTreeNodes(d.value, childContainer, depth+1); el.querySelector('.tree-toggle').style.opacity='1'; }
+          } catch{}
+        }
+        childContainer.classList.toggle('open');
+        el.querySelector('.tree-toggle').classList.toggle('open');
+      }, 250);
+    });
+    el.addEventListener('dblclick', async e => {
+      e.stopPropagation();
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
       await navigateTo(buildPathTo(item));
-      if (!childContainer.dataset.loaded) {
-        childContainer.dataset.loaded = '1';
-        try {
-          const d = await graphCall(`/drives/${currentDriveId}/items/${item.id}/children?$filter=folder ne null&$select=id,name,folder`);
-          if (d.value&&d.value.length) { buildTreeNodes(d.value, childContainer, depth+1); el.querySelector('.tree-toggle').style.opacity='1'; }
-        } catch{}
-      }
-      childContainer.classList.toggle('open');
-      el.querySelector('.tree-toggle').classList.toggle('open');
     });
     wrapper.appendChild(el); wrapper.appendChild(childContainer); container.appendChild(wrapper);
   });
