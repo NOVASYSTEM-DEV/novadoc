@@ -551,18 +551,46 @@ function buildTreeNodes(items, container, depth) {
     const childContainer = document.createElement('div');
     childContainer.className = 'tree-children';
     // Drag & drop depuis la zone principale vers l'arborescence
+    let hoverExpandTimer = null;
     el.addEventListener('dragover', e => {
       if (!dragSource || dragSource.id === item.id) return;
       e.preventDefault(); e.stopPropagation();
       el.style.background = 'rgba(47,111,212,0.25)';
       el.style.borderRadius = '4px';
+      // Auto-déplier après 600ms de survol
+      if (!hoverExpandTimer) {
+        hoverExpandTimer = setTimeout(async () => {
+          const wrapper = el.parentElement;
+          const childContainer = wrapper?.querySelector('.tree-children');
+          const toggle = el.querySelector('.tree-toggle');
+          if (childContainer && !childContainer.classList.contains('open')) {
+            if (!childContainer.dataset.loaded) {
+              childContainer.dataset.loaded = '1';
+              try {
+                const d = await graphCall(`/drives/${currentDriveId}/items/${item.id}/children?$filter=folder ne null&$select=id,name,folder`);
+                if (d.value && d.value.length) {
+                  const depth = parseInt(el.className.match(/depth-(\d)/)?.[1] || 0);
+                  buildTreeNodes(d.value, childContainer, depth + 1);
+                  if (toggle) toggle.style.opacity = '1';
+                }
+              } catch {}
+            }
+            childContainer.classList.add('open');
+            if (toggle) toggle.classList.add('open');
+          }
+        }, 600);
+      }
     });
     el.addEventListener('dragleave', () => {
       el.style.background = '';
+      clearTimeout(hoverExpandTimer);
+      hoverExpandTimer = null;
     });
     el.addEventListener('drop', e => {
       e.preventDefault(); e.stopPropagation();
       el.style.background = '';
+      clearTimeout(hoverExpandTimer);
+      hoverExpandTimer = null;
       if (!dragSource || dragSource.id === item.id) return;
       moveTarget = { id: item.id, name: item.name };
       showMoveModal();
