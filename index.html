@@ -976,25 +976,27 @@ async function showTrash() {
   document.getElementById('trash-list').innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
   try {
     // Graph API: liste les éléments supprimés du drive
-    const data = await graphCall(`/drives/${currentDriveId}/items/root/children?$select=id,name,deleted,lastModifiedDateTime,size,file,folder&$filter=deleted ne null`);
+    // Utiliser l'API SharePoint REST pour la corbeille (Graph n'expose pas la recycle bin)
+    const token = await getToken();
+    const siteId = await getSiteId();
+    const res = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/drive/recycleBin/items?$select=id,name,size,file,folder,deleted`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
     renderTrashList(data.value || []);
   } catch(e) {
-    // Fallback: utiliser la liste locale trashItems
+    // Fallback: liste locale + lien SharePoint
     if (trashItems.length > 0) {
       renderTrashList(trashItems.map(t => ({ id: t.id, name: t.name, _localDeleted: true, deletedAt: t.deletedAt, folder: t.type==='folder'?{}:null })));
     } else {
-      // Essayer via sites/recycle
-      try {
-        const token = await getToken();
-        const siteId = await getSiteId();
-        const res = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/root/children?$select=id,name,deleted,file,folder`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const d = await res.json();
-        renderTrashList((d.value||[]).filter(i=>i.deleted));
-      } catch(e2) {
-        document.getElementById('trash-list').innerHTML = `<div class="trash-empty">Impossible de charger la corbeille.<br><a href="https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_layouts/15/RecycleBin.aspx" target="_blank" style="color:var(--accent)">Ouvrir la corbeille SharePoint</a></div>`;
-      }
+      document.getElementById('trash-list').innerHTML = `<div class="trash-empty">
+        <p style="margin-bottom:12px">La corbeille n'est pas accessible via l'API.</p>
+        <a href="https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_layouts/15/RecycleBin.aspx" target="_blank" 
+           style="background:var(--accent);color:white;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px">
+          Ouvrir la corbeille SharePoint
+        </a>
+      </div>`;
     }
   }
 }
