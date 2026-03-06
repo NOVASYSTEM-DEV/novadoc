@@ -482,6 +482,40 @@ async function navigateTo(path) {
   updateSidebarActive();
   renderBreadcrumb();
   await loadCurrentFolder();
+  // Déplier l'arborescence automatiquement
+  if (path.length > 0) expandTreeTo(path);
+}
+
+async function expandTreeTo(path) {
+  // Chercher et déplier chaque niveau du chemin dans la sidebar
+  for (const segment of path) {
+    const treeEl = document.querySelector(`.tree-item[data-id="${segment.id}"]`);
+    if (!treeEl) continue;
+    const wrapper = treeEl.parentElement;
+    const childContainer = wrapper ? wrapper.querySelector('.tree-children') : null;
+    const toggle = treeEl.querySelector('.tree-toggle');
+    if (childContainer && !childContainer.classList.contains('open')) {
+      // Charger les enfants si pas encore chargé
+      if (!childContainer.dataset.loaded) {
+        childContainer.dataset.loaded = '1';
+        try {
+          const d = await graphCall(`/drives/${currentDriveId}/items/${segment.id}/children?$filter=folder ne null&$select=id,name,folder`);
+          if (d.value && d.value.length) {
+            const depth = parseInt(treeEl.className.match(/depth-(\d)/)?.[1] || 0);
+            buildTreeNodes(d.value, childContainer, depth + 1);
+            if (toggle) toggle.style.opacity = '1';
+          }
+        } catch {}
+      }
+      childContainer.classList.add('open');
+      if (toggle) toggle.classList.add('open');
+    }
+    // Marquer comme actif
+    document.querySelectorAll('.tree-item').forEach(el => el.classList.remove('active'));
+    treeEl.classList.add('active');
+    // Scroll vers l'élément
+    treeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
 }
 
 async function loadCurrentFolder(filter='') {
