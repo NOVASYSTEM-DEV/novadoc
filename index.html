@@ -781,25 +781,30 @@ async function createNew(type) {
   const name = prompt(`Nom du fichier (sans extension) :`);
   if (!name) return;
 
-  // Contenu minimal vide selon le type
-  const mimeTypes = {
-    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    one:  'application/onenote'
-  };
-
   showLoading(`Création de ${name}.${type}...`);
   try {
     const token = await getToken();
-    // Créer un fichier vide — SharePoint crée un fichier Office vide par défaut
-    const res = await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/items/${folderId}:/${encodeURIComponent(name+'.'+type)}:/content`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': mimeTypes[type]||'application/octet-stream' },
-      body: new Blob([], { type: mimeTypes[type] })
+    const fileName = name + '.' + type;
+    // Créer via upload session - SharePoint initialise le fichier Office correctement
+    const sessionRes = await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/items/${folderId}:/${encodeURIComponent(fileName)}:/createUploadSession`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item: { '@microsoft.graph.conflictBehavior': 'rename', name: fileName } })
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!sessionRes.ok) throw new Error(await sessionRes.text());
+    const session = await sessionRes.json();
+    // Upload 1 octet - SharePoint corrige le format Office
+    const uploadRes = await fetch(session.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Range': 'bytes 0-0/1', 'Content-Length': '1' },
+      body: new Uint8Array([0])
+    });
     await loadCurrentFolder();
+    // Ouvrir dans Office Online pour initialiser le fichier
+    if (uploadRes.ok) {
+      const item = await uploadRes.json().catch(()=>null);
+      if (item && item.webUrl) setTimeout(()=> window.open(item.webUrl + '?web=1', '_blank'), 800);
+    }
   } catch(e) { alert('Erreur création: '+e.message); await loadCurrentFolder(); }
 }
 
