@@ -785,19 +785,25 @@ async function createNew(type) {
   try {
     const token = await getToken();
     const fileName = name + '.' + type;
-    // Créer via upload session - SharePoint initialise le fichier Office correctement
-    const sessionRes = await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/items/${folderId}:/${encodeURIComponent(fileName)}:/createUploadSession`, {
+    // Utiliser l'API Graph copyItem depuis un template SharePoint
+    // Créer d'abord via PUT avec contenu vide puis checkout/checkin
+    const putRes = await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/items/${folderId}:/${encodeURIComponent(fileName)}:/content`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+      body: new Uint8Array([])
+    });
+    if (!putRes.ok) throw new Error(await putRes.text());
+    const newItem = await putRes.json();
+    // Checkout pour débloquer le fichier
+    await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/items/${newItem.id}/checkout`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    // Checkin pour finaliser
+    await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/items/${newItem.id}/checkin`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item: { '@microsoft.graph.conflictBehavior': 'rename', name: fileName } })
-    });
-    if (!sessionRes.ok) throw new Error(await sessionRes.text());
-    const session = await sessionRes.json();
-    // Upload 1 octet - SharePoint corrige le format Office
-    const uploadRes = await fetch(session.uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Range': 'bytes 0-0/1', 'Content-Length': '1' },
-      body: new Uint8Array([0])
+      body: JSON.stringify({ comment: '' })
     });
     await loadCurrentFolder();
   } catch(e) { alert('Erreur création: '+e.message); await loadCurrentFolder(); }
