@@ -150,6 +150,21 @@
   .move-btn-group{display:flex;gap:8px;margin-top:24px}
   .move-btn{flex:1;padding:12px;border-radius:8px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:2px solid var(--border);background:white;color:var(--text);transition:all 0.15s;text-align:center}
   .move-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-light)}
+
+  /* SÉLECTION MULTIPLE */
+  .grid-item.selected{background:var(--accent-light);border-color:var(--accent)!important;outline:2px solid var(--accent)}
+  .list-view tbody tr.selected{background:var(--accent-light);outline:2px solid var(--accent)}
+  #selection-bar{display:none;position:fixed;bottom:48px;left:50%;transform:translateX(-50%);
+    background:var(--sidebar-bg);color:white;border-radius:12px;padding:10px 20px;
+    gap:8px;align-items:center;z-index:400;box-shadow:0 4px 20px rgba(0,0,0,0.3);
+    font-size:13px;white-space:nowrap}
+  #selection-bar.visible{display:flex}
+  .sel-btn{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;
+    border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.1);color:white;transition:background 0.15s}
+  .sel-btn:hover{background:rgba(255,255,255,0.2)}
+  .sel-btn.danger{border-color:rgba(231,76,60,0.5);color:#ff6b6b}
+  .sel-btn.danger:hover{background:rgba(231,76,60,0.2)}
+  .sel-count{font-weight:600;color:#f5a623;margin-right:4px}
 </style>
 </head>
 <body>
@@ -313,6 +328,7 @@
           </div>
         </div>
       </div>
+      <button class="toolbar-btn" id="paste-btn" onclick="pasteItems()" style="display:none">📋 Coller</button>
       <button class="toolbar-btn" id="trash-btn" onclick="showTrash()">🗑 Corbeille</button>
       <div class="toolbar-spacer"></div>
       <div class="view-toggle">
@@ -333,6 +349,15 @@
 </div>
 
 <input type="file" id="file-input" multiple style="display:none" onchange="uploadFiles(this.files)">
+
+<!-- BARRE SÉLECTION MULTIPLE -->
+<div id="selection-bar">
+  <span><span class="sel-count" id="sel-count">0</span> élément(s) sélectionné(s)</span>
+  <button class="sel-btn" onclick="selCut()">✂️ Couper</button>
+  <button class="sel-btn" onclick="selCopy()">📋 Copier</button>
+  <button class="sel-btn danger" onclick="selDelete()">🗑 Supprimer</button>
+  <button class="sel-btn" onclick="clearSelection()">✕ Désélectionner</button>
+</div>
 
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
@@ -363,6 +388,10 @@ let isContributor = false;
 let ctxTarget = null;
 let dragSource = null; // {id, name, type, parentPath}
 let moveTarget = null; // destination folder id
+let selectedItems = []; // sélection multiple [{id, name, type}]
+let trashItems = []; // corbeille locale [{id, name, type, deletedAt}]
+let clipboardItems = []; // presse-papier [{id, name, type}]
+let clipboardAction = null; // 'cut' ou 'copy'
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 async function msalLogin() {
@@ -566,9 +595,14 @@ function listItemHTML(item) {
 
 function attachItemEvents(content, items) {
   content.querySelectorAll('[data-id]').forEach(el => {
-    // Click
-    el.addEventListener('click', () => {
+    // Click avec Ctrl/Shift pour sélection multiple
+    el.addEventListener('click', e => {
       const { id, name, type, url } = el.dataset;
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        e.preventDefault();
+        toggleSelection(el, { id, name, type });
+        return;
+      }
       if (type==='folder') navigateTo([...currentPath, {id, name}]);
       else openFileLocal(name, url, el.dataset.parentPath);
     });
@@ -577,6 +611,8 @@ function attachItemEvents(content, items) {
       e.preventDefault();
       const { id, name, type, url } = el.dataset;
       ctxTarget = { id, name, type, url, parentPath: el.dataset.parentPath, createdBy: el.dataset.createdBy||'' };
+      // Si item pas dans sélection, reset sélection
+      if (!selectedItems.find(s=>s.id===id)) clearSelection();
       showCtxMenu(e, type);
     });
     // Drag start
@@ -806,6 +842,122 @@ async function doShare() {
   } finally {
     btn.textContent = "Envoyer l'invitation";
   }
+}
+
+// ─── SÉLECTION MULTIPLE ──────────────────────────────────────────────────────
+function toggleSelection(el, item) {
+  const idx = selectedItems.findIndex(s => s.id === item.id);
+  if (idx >= 0) {
+    selectedItems.splice(idx, 1);
+    el.classList.remove('selected');
+  } else {
+    selectedItems.push(item);
+    el.classList.add('selected');
+  }
+  updateSelectionBar();
+}
+
+function clearSelection() {
+  selectedItems = [];
+  document.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
+  updateSelectionBar();
+}
+
+function updateSelectionBar() {
+  const bar = document.getElementById('selection-bar');
+  const count = document.getElementById('sel-count');
+  if (selectedItems.length > 0) {
+    bar.classList.add('visible');
+    count.textContent = selectedItems.length;
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+function selCut() {
+  if (!selectedItems.length) return;
+  clipboardItems = [...selectedItems];
+  clipboardAction = 'cut';
+  document.getElementById('paste-btn').style.display = '';
+  clearSelection();
+  alert(`✂️ ${clipboardItems.length} élément(s) prêt(s) à déplacer. Naviguez vers le dossier destination et cliquez "Coller".`);
+}
+
+function selCopy() {
+  if (!selectedItems.length) return;
+  clipboardItems = [...selectedItems];
+  clipboardAction = 'copy';
+  document.getElementById('paste-btn').style.display = '';
+  clearSelection();
+  alert(`📋 ${clipboardItems.length} élément(s) copié(s). Naviguez vers le dossier destination et cliquez "Coller".`);
+}
+
+async function pasteItems() {
+  if (!clipboardItems.length) return;
+  const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length-1].id;
+  const action = clipboardAction;
+  showLoading(action === 'cut' ? 'Déplacement...' : 'Copie...');
+  try {
+    const token = await getToken();
+    const destRef = { driveId: currentDriveId, id: folderId };
+    for (const item of clipboardItems) {
+      if (action === 'cut') {
+        await graphCall(`/drives/${currentDriveId}/items/${item.id}`, 'PATCH', { parentReference: destRef });
+      } else {
+        const res = await fetch(`https://graph.microsoft.com/v1.0/drives/${currentDriveId}/items/${item.id}/copy`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentReference: destRef, name: item.name })
+        });
+        if (!res.ok) throw new Error(await res.text());
+      }
+    }
+    if (action === 'copy') await new Promise(r => setTimeout(r, 1500));
+    clipboardItems = [];
+    clipboardAction = null;
+    document.getElementById('paste-btn').style.display = 'none';
+    await loadCurrentFolder();
+    await loadTree();
+  } catch(e) { alert('Erreur coller: ' + e.message); await loadCurrentFolder(); }
+}
+
+async function selDelete() {
+  if (!selectedItems.length) return;
+  if (!confirm(`Supprimer ${selectedItems.length} élément(s) ?`)) return;
+  const toDelete = [...selectedItems];
+  clearSelection();
+  showLoading('Suppression...');
+  try {
+    for (const item of toDelete) {
+      trashItems.unshift({ id: item.id, name: item.name, type: item.type, deletedAt: new Date().toISOString() });
+      await graphCall(`/drives/${currentDriveId}/items/${item.id}`, 'DELETE');
+    }
+    updateTrashBadge();
+    await loadCurrentFolder();
+    await loadTree();
+  } catch(e) { alert('Erreur suppression: ' + e.message); await loadCurrentFolder(); }
+}
+
+// ─── CORBEILLE ────────────────────────────────────────────────────────────────
+function updateTrashBadge() {
+  const btn = document.getElementById('trash-btn');
+  if (btn) btn.textContent = trashItems.length > 0 ? `🗑 Corbeille (${trashItems.length})` : '🗑 Corbeille';
+}
+
+function showTrash() {
+  if (!trashItems.length) { alert('La corbeille est vide.'); return; }
+  const lines = trashItems.map((t,i) => `${i+1}. ${t.name} (${t.type==='folder'?'Dossier':'Fichier'}) — ${new Date(t.deletedAt).toLocaleString('fr-FR')}`);
+  const choice = prompt(`🗑 Corbeille (${trashItems.length} élément(s)) :\n\n${lines.join('\n')}\n\nEntrez un numéro pour info, ou "vider" pour vider :`);
+  if (!choice) return;
+  if (choice.toLowerCase() === 'vider') {
+    trashItems = [];
+    updateTrashBadge();
+    alert('Corbeille vidée.');
+    return;
+  }
+  const idx = parseInt(choice) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= trashItems.length) { alert('Numéro invalide.'); return; }
+  alert(`"${trashItems[idx].name}" a été supprimé de SharePoint.\nPour restaurer, utilisez la corbeille SharePoint :\nhttps://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_layouts/15/RecycleBin.aspx`);
 }
 
 // ─── MOVE / COPY ──────────────────────────────────────────────────────────────
