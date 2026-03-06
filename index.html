@@ -201,9 +201,9 @@
     Historique des versions
   </div>
   <div class="ctx-sep contributor-only" style="display:none" id="ctx-sep-del"></div>
-  <div class="ctx-item danger contributor-only" onclick="ctxDelete()" style="display:none" id="ctx-delete">
+  <div class="ctx-item danger" onclick="ctxDelete()" id="ctx-delete" style="display:none">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-    Mettre à la corbeille
+    Supprimer
   </div>
 </div>
 
@@ -710,45 +710,59 @@ async function doShare() {
 
   try {
     const novadocLink = APP_URL;
-    const customMsg = message 
-      ? `${message}\n\nConnectez-vous sur NovaDoc : ${novadocLink}` 
-      : `Vous avez été invité(e) à accéder à "${ctxTarget.name}".\n\nConnectez-vous sur NovaDoc : ${novadocLink}`;
-    // Inviter via Graph (envoie un seul email Microsoft sans lien SharePoint superflu)
+    const token = await getToken();
+    const roleLabel = role === 'write' ? 'Lecture et modification' : 'Lecture seule';
+    
+    // Étape 1: Accorder les droits via invite (sans email Microsoft)
     for (const email of emails) {
       await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}/invite`, 'POST', {
         requireSignIn: true,
-        sendInvitation: true,
+        sendInvitation: false,
         roles: [role === 'write' ? 'write' : 'read'],
-        recipients: [{ email }],
-        message: customMsg
+        recipients: [{ email }]
       });
     }
+
+    // Étape 2: Envoyer notre propre email via Mail.Send (sans liens SharePoint)
+    for (const email of emails) {
+      const htmlContent = `
+        <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px">
+          <h2 style="color:#2f6fd4">NovaDoc — Partage de document</h2>
+          <p>Bonjour,</p>
+          <p>${message || `<strong>${document.getElementById('user-name').textContent}</strong> vous a partagé l'élément suivant :`}</p>
+          <div style="background:#f4f5f7;border-radius:8px;padding:16px;margin:20px 0">
+            <strong>${ctxTarget.name}</strong><br>
+            <span style="color:#666;font-size:13px">Droits : ${roleLabel}</span>
+          </div>
+          <a href="${novadocLink}" style="display:inline-block;background:#2f6fd4;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">
+            Accéder à NovaDoc
+          </a>
+          <p style="color:#999;font-size:12px;margin-top:24px">
+            Connectez-vous avec votre compte Microsoft 365 sur ${novadocLink}
+          </p>
+        </div>`;
+      
+      const mailBody = {
+        message: {
+          subject: `[NovaDoc] ${document.getElementById('user-name').textContent} a partagé "${ctxTarget.name}"`,
+          body: { contentType: 'HTML', content: htmlContent },
+          toRecipients: [{ emailAddress: { address: email } }]
+        },
+        saveToSentItems: false
+      };
+      
+      const mailRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(mailBody)
+      });
+      if (!mailRes.ok) throw new Error(await mailRes.text());
+    }
+    
     closeShareModal();
     alert(`✅ Invitation envoyée à : ${emails.join(', ')}`);
   } catch(e) {
-    // Fallback si invite API échoue (ex: limitedAccess) - envoyer via Mail Graph
-    try {
-      const novadocLink = APP_URL;
-      const token = await getToken();
-      for (const email of emails) {
-        const mailBody = {
-          message: {
-            subject: `Partage NovaDoc : ${ctxTarget.name}`,
-            body: { contentType: 'HTML', content: `<p>Bonjour,</p><p>${message || 'Un document a été partagé avec vous.'}</p><p>Accédez à NovaDoc : <a href="${novadocLink}">${novadocLink}</a></p><p>Droits : ${role === 'write' ? 'Lecture et modification' : 'Lecture seule'}</p>` },
-            toRecipients: [{ emailAddress: { address: email } }]
-          }
-        };
-        await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(mailBody)
-        });
-      }
-      closeShareModal();
-      alert(`✅ Email envoyé à : ${emails.join(', ')}`);
-    } catch(e2) {
-      alert('Erreur partage: '+e2.message);
-    }
+    alert('Erreur partage: '+e.message);
   } finally {
     btn.textContent = "Envoyer l'invitation";
   }

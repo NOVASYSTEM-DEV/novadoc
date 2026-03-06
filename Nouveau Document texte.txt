@@ -20,5 +20,13 @@ git add . && git commit -m "fix: supprimer ouverture auto apres creation" && git
 9. Autoriser la suppression que par le createur du fichier ou dossier.
 
 
+1. Lors du partage d'un fichier ou dossier, en plus de la lecture, et la modification, on ajoute un droit, celui de pouvoir créer fichier et dossier, seulement dans les dossiers dont l'utilisateur à l'accès.
+2. Historique des versions de fonctionne pas.
+3. Les liens SharePoint apparaissent toujours sur le mail reçu
+4. Clique-droit supprimer à ajouter
+
+
+
+
 
 
