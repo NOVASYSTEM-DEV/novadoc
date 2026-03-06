@@ -1067,8 +1067,8 @@ async function pasteItems() {
     clipboardItems = [];
     clipboardAction = null;
     document.getElementById('paste-btn').style.display = 'none';
+    clearSelection();
     await loadCurrentFolder();
-    await loadTree();
   } catch(e) { alert('Erreur coller: ' + e.message); await loadCurrentFolder(); }
 }
 
@@ -1225,8 +1225,8 @@ async function doMoveOrCopy(action) {
       // Attendre un peu pour la copie async
       await new Promise(r => setTimeout(r, 1500));
     }
+    clearSelection();
     await loadCurrentFolder();
-    await loadTree();
   } catch(e) {
     if (e.message && e.message.includes('nameAlreadyExists')) {
       const choice = confirm(`Un élément nommé "${srcName}" existe déjà dans "${moveTarget?.name || 'la destination'}".
@@ -1266,8 +1266,8 @@ Cliquez OK pour écraser, ou Annuler pour renommer automatiquement.`);
             await new Promise(r => setTimeout(r, 1500));
           }
         }
+        clearSelection();
         await loadCurrentFolder();
-        await loadTree();
       } catch(e2) { alert('Erreur: '+e2.message); await loadCurrentFolder(); }
     } else {
       alert('Erreur: '+e.message);
