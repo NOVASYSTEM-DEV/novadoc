@@ -530,8 +530,10 @@ async function loadCurrentFolder(filter='') {
 }
 
 // ─── TREE ─────────────────────────────────────────────────────────────────────
-async function loadTree() {
+async function loadTree(forceReload=false) {
   const root = document.getElementById('tree-root');
+  // Ne recharger que si vide ou forceReload
+  if (!forceReload && root.children.length > 0) return;
   root.innerHTML = '';
   try {
     const data = await graphCall(`/drives/${currentDriveId}/root/children?$filter=folder ne null&$select=id,name,folder`);
@@ -594,28 +596,26 @@ function buildTreeNodes(items, container, depth) {
       showMoveModal();
     });
 
-    // Clic simple = déplier, double clic = naviguer
-    let clickTimer = null;
+    // Simple clic = naviguer + déplier
     el.addEventListener('click', async e => {
       e.stopPropagation();
-      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; return; }
-      clickTimer = setTimeout(async () => {
-        clickTimer = null;
-        if (!childContainer.dataset.loaded) {
-          childContainer.dataset.loaded = '1';
-          try {
-            const d = await graphCall(`/drives/${currentDriveId}/items/${item.id}/children?$filter=folder ne null&$select=id,name,folder`);
-            if (d.value&&d.value.length) { buildTreeNodes(d.value, childContainer, depth+1); el.querySelector('.tree-toggle').style.opacity='1'; }
-          } catch{}
-        }
-        childContainer.classList.toggle('open');
-        el.querySelector('.tree-toggle').classList.toggle('open');
-      }, 250);
-    });
-    el.addEventListener('dblclick', async e => {
-      e.stopPropagation();
-      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      // Naviguer
       await navigateTo(buildPathTo(item));
+      // Déplier/charger enfants
+      if (!childContainer.dataset.loaded) {
+        childContainer.dataset.loaded = '1';
+        try {
+          const d = await graphCall(`/drives/${currentDriveId}/items/${item.id}/children?$filter=folder ne null&$select=id,name,folder`);
+          if (d.value&&d.value.length) {
+            buildTreeNodes(d.value, childContainer, depth+1);
+            el.querySelector('.tree-toggle').style.opacity='1';
+          }
+        } catch{}
+      }
+      // Toggle ouverture
+      const isOpen = childContainer.classList.contains('open');
+      childContainer.classList.toggle('open', !isOpen);
+      el.querySelector('.tree-toggle').classList.toggle('open', !isOpen);
     });
     wrapper.appendChild(el); wrapper.appendChild(childContainer); container.appendChild(wrapper);
   });
@@ -852,7 +852,7 @@ async function ctxRename() {
   if (!newName || newName===ctxTarget.name) return;
   try {
     await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}`, 'PATCH', { name: newName });
-    await loadCurrentFolder(); await loadTree();
+    await loadCurrentFolder();
   } catch(e) { alert('Erreur renommage: '+e.message); }
 }
 
@@ -904,7 +904,7 @@ async function ctxDelete() {
   if (!confirm(`Supprimer "${ctxTarget.name}" ?\n\nL'élément sera récupérable pendant 30 jours par l'administrateur.`)) return;
   try {
     await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}`, 'DELETE');
-    await loadCurrentFolder(); await loadTree();
+    await loadCurrentFolder();
   } catch(e) { alert('Erreur suppression: '+e.message); }
 }
 
@@ -1085,7 +1085,6 @@ async function selDelete() {
     }
     updateTrashBadge();
     await loadCurrentFolder();
-    await loadTree();
   } catch(e) { alert('Erreur suppression: ' + e.message); await loadCurrentFolder(); }
 }
 
@@ -1164,7 +1163,6 @@ async function restoreTrashItem(id, name) {
     if (!res.ok) throw new Error(await res.text());
     await showTrash();
     await loadCurrentFolder();
-    await loadTree();
     alert(`✅ "${name}" restauré.`);
   } catch(e) {
     alert(`Erreur restauration: ${e.message}`);
@@ -1294,7 +1292,8 @@ async function createNew(type) {
       await graphCall(`/drives/${currentDriveId}/items/${folderId}/children`, 'POST', {
         name, folder: {}, '@microsoft.graph.conflictBehavior': 'rename'
       });
-      await loadCurrentFolder(); await loadTree();
+      await loadCurrentFolder();
+      await loadTree(true);
     } catch(e) { alert('Erreur: '+e.message); }
     return;
   }
