@@ -165,6 +165,16 @@
   .sel-btn.danger{border-color:rgba(231,76,60,0.5);color:#ff6b6b}
   .sel-btn.danger:hover{background:rgba(231,76,60,0.2)}
   .sel-count{font-weight:600;color:#f5a623;margin-right:4px}
+  .trash-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--border);border-radius:6px}
+  .trash-item:hover{background:var(--hover-row)}
+  .trash-item-info{flex:1;min-width:0}
+  .trash-item-name{font-size:13px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .trash-item-meta{font-size:11px;color:var(--text-muted);margin-top:2px}
+  .trash-restore-btn{padding:4px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--accent);background:white;color:var(--accent);white-space:nowrap}
+  .trash-restore-btn:hover{background:var(--accent-light)}
+  .modal-btn.danger{color:#e74c3c;border-color:#e74c3c}
+  .modal-btn.danger:hover{background:#ffeaea}
+  .trash-empty{text-align:center;padding:40px;color:var(--text-muted);font-size:14px}
 </style>
 </head>
 <body>
@@ -246,6 +256,23 @@
       <button class="modal-btn primary" onclick="doShare()">
         <span id="share-btn-text">Envoyer l'invitation</span>
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CORBEILLE -->
+<div class="modal-overlay" id="trash-modal">
+  <div class="modal" style="width:600px;max-height:80vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3 style="margin:0">🗑 Corbeille</h3>
+      <button class="modal-btn" onclick="closeTrashModal()" style="padding:4px 12px">✕</button>
+    </div>
+    <div id="trash-list" style="flex:1;overflow-y:auto;min-height:200px">
+      <div class="loading"><div class="spinner"></div> Chargement...</div>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
+      <button class="modal-btn danger" onclick="emptyTrash()" style="color:#e74c3c;border-color:#e74c3c">Vider la corbeille</button>
+      <button class="modal-btn primary" onclick="closeTrashModal()">Fermer</button>
     </div>
   </div>
 </div>
@@ -944,20 +971,112 @@ function updateTrashBadge() {
   if (btn) btn.textContent = trashItems.length > 0 ? `🗑 Corbeille (${trashItems.length})` : '🗑 Corbeille';
 }
 
-function showTrash() {
-  if (!trashItems.length) { alert('La corbeille est vide.'); return; }
-  const lines = trashItems.map((t,i) => `${i+1}. ${t.name} (${t.type==='folder'?'Dossier':'Fichier'}) — ${new Date(t.deletedAt).toLocaleString('fr-FR')}`);
-  const choice = prompt(`🗑 Corbeille (${trashItems.length} élément(s)) :\n\n${lines.join('\n')}\n\nEntrez un numéro pour info, ou "vider" pour vider :`);
-  if (!choice) return;
-  if (choice.toLowerCase() === 'vider') {
-    trashItems = [];
-    updateTrashBadge();
-    alert('Corbeille vidée.');
+async function showTrash() {
+  document.getElementById('trash-modal').classList.add('open');
+  document.getElementById('trash-list').innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
+  try {
+    // Graph API: liste les éléments supprimés du drive
+    const data = await graphCall(`/drives/${currentDriveId}/items/root/children?$select=id,name,deleted,lastModifiedDateTime,size,file,folder&$filter=deleted ne null`);
+    renderTrashList(data.value || []);
+  } catch(e) {
+    // Fallback: utiliser la liste locale trashItems
+    if (trashItems.length > 0) {
+      renderTrashList(trashItems.map(t => ({ id: t.id, name: t.name, _localDeleted: true, deletedAt: t.deletedAt, folder: t.type==='folder'?{}:null })));
+    } else {
+      // Essayer via sites/recycle
+      try {
+        const token = await getToken();
+        const siteId = await getSiteId();
+        const res = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/root/children?$select=id,name,deleted,file,folder`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const d = await res.json();
+        renderTrashList((d.value||[]).filter(i=>i.deleted));
+      } catch(e2) {
+        document.getElementById('trash-list').innerHTML = `<div class="trash-empty">Impossible de charger la corbeille.<br><a href="https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_layouts/15/RecycleBin.aspx" target="_blank" style="color:var(--accent)">Ouvrir la corbeille SharePoint</a></div>`;
+      }
+    }
+  }
+}
+
+let _siteId = null;
+async function getSiteId() {
+  if (_siteId) return _siteId;
+  const site = await graphCall('/sites/novasystemfr.sharepoint.com:/sites/TESTSHAREPOINTEXCEL');
+  _siteId = site.id;
+  return _siteId;
+}
+
+function renderTrashList(items) {
+  const list = document.getElementById('trash-list');
+  if (!items.length) {
+    list.innerHTML = '<div class="trash-empty">🎉 La corbeille est vide</div>';
     return;
   }
-  const idx = parseInt(choice) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= trashItems.length) { alert('Numéro invalide.'); return; }
-  alert(`"${trashItems[idx].name}" a été supprimé de SharePoint.\nPour restaurer, utilisez la corbeille SharePoint :\nhttps://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_layouts/15/RecycleBin.aspx`);
+  list.innerHTML = items.map((item, i) => {
+    const isFolder = !!item.folder;
+    const icon = isFolder ? '📁' : getFileEmoji(item.name);
+    const date = item.deletedAt ? new Date(item.deletedAt).toLocaleString('fr-FR') : (item.lastModifiedDateTime ? new Date(item.lastModifiedDateTime).toLocaleString('fr-FR') : '—');
+    const size = item.size ? formatSize(item.size) : '';
+    const local = item._localDeleted;
+    return `<div class="trash-item">
+      <span style="font-size:20px">${icon}</span>
+      <div class="trash-item-info">
+        <div class="trash-item-name">${item.name}</div>
+        <div class="trash-item-meta">${isFolder?'Dossier':'Fichier'}${size?' · '+size:''} · Supprimé le ${date}</div>
+      </div>
+      ${local ? `<button class="trash-restore-btn" onclick="restoreTrashItem('${item.id}','${item.name.replace(/'/g,"\\'")}',${i})">Restaurer</button>` : `<button class="trash-restore-btn" onclick="restoreTrashItem('${item.id}','${item.name.replace(/'/g,"\\'")}',${i})">Restaurer</button>`}
+    </div>`;
+  }).join('');
+  list._items = items;
+}
+
+function getFileEmoji(name) {
+  const ext = (name||'').split('.').pop().toLowerCase();
+  const map = {docx:'📄',doc:'📄',xlsx:'📊',xls:'📊',pptx:'📋',ppt:'📋',pdf:'📕',png:'🖼',jpg:'🖼',zip:'📦',one:'📓'};
+  return map[ext] || '📄';
+}
+
+async function restoreTrashItem(id, name, idx) {
+  if (!confirm(`Restaurer "${name}" ?`)) return;
+  try {
+    // Tenter restauration via Graph (déplacer vers root)
+    await graphCall(`/drives/${currentDriveId}/items/${id}`, 'PATCH', {
+      parentReference: { driveId: currentDriveId, id: 'root' }
+    });
+    // Retirer de la liste locale si présent
+    const li = trashItems.findIndex(t => t.id === id);
+    if (li >= 0) trashItems.splice(li, 1);
+    updateTrashBadge();
+    await showTrash();
+    await loadCurrentFolder();
+    await loadTree();
+  } catch(e) {
+    alert(`Impossible de restaurer via l'API.\nUtilisez la corbeille SharePoint :\nhttps://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_layouts/15/RecycleBin.aspx`);
+  }
+}
+
+async function emptyTrash() {
+  if (!confirm('Vider définitivement la corbeille ? Cette action est irréversible.')) return;
+  const list = document.getElementById('trash-list');
+  const items = list._items || [];
+  if (!items.length) { alert('La corbeille est déjà vide.'); return; }
+  list.innerHTML = '<div class="loading"><div class="spinner"></div> Suppression en cours...</div>';
+  let errors = 0;
+  for (const item of items) {
+    try {
+      await graphCall(`/drives/${currentDriveId}/items/${item.id}`, 'DELETE');
+    } catch { errors++; }
+  }
+  trashItems = [];
+  updateTrashBadge();
+  if (errors) alert(`${errors} élément(s) n'ont pas pu être supprimés définitivement.`);
+  else alert('Corbeille vidée.');
+  closeTrashModal();
+}
+
+function closeTrashModal() {
+  document.getElementById('trash-modal').classList.remove('open');
 }
 
 // ─── MOVE / COPY ──────────────────────────────────────────────────────────────
