@@ -1673,7 +1673,7 @@ async function createNew(type) {
     });
     if (!putRes.ok) throw new Error(await putRes.text());
     await loadCurrentFolder();
-  } catch(e) { hideLoading(); alert(permissionErrorMsg(e)); await loadCurrentFolder(); }
+  } catch(e) { alert('Erreur création: '+e.message); await loadCurrentFolder(); }
 }
 
 // ─── UPLOAD ───────────────────────────────────────────────────────────────────
