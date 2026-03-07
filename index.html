@@ -1088,6 +1088,42 @@ async function loadPermissions() {
   }
 }
 
+// Niveaux SharePoint :
+// read    = Lecture seule (roleDefId: 1073741826)
+// write   = Contribution = modifier SANS supprimer (roleDefId: 1073741827)  
+// owner   = Contrôle total (roleDefId: 1073741829)
+const SP_ROLE_IDS = { read: 1073741826, write: 1073741827, owner: 1073741829 };
+const SP_SITE_URL = 'https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL';
+
+async function addPermissionSP(email, role) {
+  // Via REST SharePoint : chercher l'utilisateur puis assigner le rôle fin
+  const token = await getToken();
+  const headers = { 'Authorization': 'Bearer '+token, 'Accept': 'application/json;odata=verbose', 'Content-Type': 'application/json;odata=verbose' };
+
+  // Résoudre l'utilisateur
+  const userRes = await fetch(SP_SITE_URL+'/_api/web/ensureuser', {
+    method: 'POST',
+    headers: { ...headers, 'X-RequestDigest': 'form-digest-value' },
+    body: JSON.stringify({ logonName: 'i:0#.f|membership|'+email })
+  });
+  if (!userRes.ok) throw new Error('Utilisateur introuvable: '+email);
+  const userData = await userRes.json();
+  const userId = userData.d.Id;
+
+  // Récupérer l'ID de l'élément SharePoint via son path
+  const itemPath = ctxTarget.url.replace(SP_SITE_URL, '').replace('/Documents/', '/Documents/').split('?')[0];
+  const roleId = SP_ROLE_IDS[role] || SP_ROLE_IDS.read;
+
+  const breakRes = await fetch(SP_SITE_URL+'/_api/web/GetFileByServerRelativeUrl(''+itemPath+'')/ListItemAllFields/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)', {
+    method: 'POST', headers
+  });
+
+  const assignRes = await fetch(SP_SITE_URL+'/_api/web/GetFileByServerRelativeUrl(''+itemPath+'')/ListItemAllFields/roleassignments/addroleassignment(principalid='+userId+',roledefid='+roleId+')', {
+    method: 'POST', headers
+  });
+  if (!assignRes.ok) throw new Error('Erreur assignation rôle');
+}
+
 async function addPermission() {
   const email = document.getElementById('perm-add-email').value.trim();
   const role = document.getElementById('perm-add-role').value;
@@ -1095,10 +1131,18 @@ async function addPermission() {
   const btn = document.querySelector('#perm-tab-add .btn-primary');
   btn.textContent = 'Ajout en cours...'; btn.disabled = true;
   try {
-    await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/invite', 'POST', {
-      requireSignIn: true, sendInvitation: false,
-      roles: [role], recipients: [{ email: email }]
-    });
+    // Essayer d'abord via REST SharePoint (gestion fine des droits)
+    try {
+      await addPermissionSP(email, role);
+    } catch(spErr) {
+      // Fallback Graph API si REST SharePoint échoue
+      console.warn('REST SP échoué, fallback Graph:', spErr.message);
+      const graphRole = role === 'owner' ? 'owner' : role === 'write' ? 'write' : 'read';
+      await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/invite', 'POST', {
+        requireSignIn: true, sendInvitation: false,
+        roles: [graphRole], recipients: [{ email: email }]
+      });
+    }
     document.getElementById('perm-add-email').value = '';
     switchPermTab('members');
     await loadPermissions();
