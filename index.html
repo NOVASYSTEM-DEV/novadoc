@@ -151,6 +151,20 @@
   .move-btn{flex:1;padding:12px;border-radius:8px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:2px solid var(--border);background:white;color:var(--text);transition:all 0.15s;text-align:center}
   .move-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-light)}
 
+  /* PERMISSIONS MODAL */
+  .perm-tab{background:none;border:none;padding:12px 18px;cursor:pointer;color:var(--text-muted);font-size:13px;border-bottom:2px solid transparent;transition:all 0.2s}
+  .perm-tab:hover{color:var(--text-primary)}
+  .perm-tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+  .perm-member-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+  .perm-member-row:last-child{border-bottom:none}
+  .perm-avatar{width:34px;height:34px;border-radius:50%;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0}
+  .perm-member-info{flex:1;min-width:0}
+  .perm-member-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .perm-member-email{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .perm-role-select{font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer}
+  .perm-remove-btn{background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;border-radius:4px;font-size:16px;line-height:1}
+  .perm-remove-btn:hover{color:#e74c3c;background:rgba(231,76,60,0.1)}
+
   /* SÉLECTION MULTIPLE */
   .grid-item{position:relative}
   .grid-item .item-checkbox{
@@ -227,9 +241,9 @@
     Télécharger
   </div>
   <div class="ctx-sep"></div>
-  <div class="ctx-item" onclick="ctxShare()">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-    Partager
+  <div class="ctx-item" onclick="showPermissionsModal()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    Gérer les accès
   </div>
   <div class="ctx-item" onclick="ctxRename()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -247,30 +261,63 @@
   </div>
 </div>
 
-<!-- MODAL PARTAGE -->
-<div class="modal-overlay" id="share-modal">
-  <div class="modal">
-    <h3>🔗 Partager — <span id="share-item-name"></span></h3>
-    <div class="modal-field">
-      <label>Destinataires (emails séparés par virgule)</label>
-      <input type="text" id="share-emails" placeholder="prenom.nom@domaine.fr, ...">
+<!-- MODAL PERMISSIONS -->
+<div class="modal-overlay" id="permissions-modal">
+  <div class="modal" style="width:620px;max-width:95vw">
+    <div class="modal-header">
+      <h3 style="margin:0">🔐 Gérer les accès — <span id="perm-title"></span></h3>
+      <button class="modal-close" onclick="closePermissionsModal()">×</button>
     </div>
-    <div class="modal-field">
-      <label>Droits d'accès</label>
-      <select id="share-role">
-        <option value="read">Lecture seule</option>
-        <option value="write">Lecture et modification</option>
-      </select>
+    <div class="modal-body" style="padding:0">
+      <!-- Tabs -->
+      <div style="display:flex;border-bottom:1px solid var(--border)">
+        <button class="perm-tab active" id="tab-members" onclick="switchPermTab('members')">👥 Membres actuels</button>
+        <button class="perm-tab" id="tab-add" onclick="switchPermTab('add')">➕ Ajouter</button>
+        <button class="perm-tab" id="tab-link" onclick="switchPermTab('link')">🔗 Lien de partage</button>
+      </div>
+      <!-- Tab membres -->
+      <div id="perm-tab-members" style="padding:16px">
+        <div id="perm-members-list"><div class="loading"><div class="spinner"></div> Chargement...</div></div>
+      </div>
+      <!-- Tab ajouter -->
+      <div id="perm-tab-add" style="padding:16px;display:none">
+        <label class="modal-label">Email ou nom (compte Microsoft)</label>
+        <input type="text" id="perm-add-email" class="modal-input" placeholder="prenom.nom@domaine.com">
+        <label class="modal-label" style="margin-top:12px">Droits</label>
+        <select id="perm-add-role" class="modal-input">
+          <option value="read">Lecture seule</option>
+          <option value="write" selected>Lecture et modification</option>
+        </select>
+        <label class="modal-label" style="margin-top:12px">Message (optionnel)</label>
+        <textarea id="perm-add-message" class="modal-input" rows="2" placeholder="Bonjour, je vous partage ce document..."></textarea>
+        <button class="btn-primary" style="margin-top:12px;width:100%" onclick="addPermission()">Ajouter l'accès</button>
+      </div>
+      <!-- Tab lien -->
+      <div id="perm-tab-link" style="padding:16px;display:none">
+        <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">Créer un lien de partage accessible sans compte Microsoft</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="background:var(--bg-secondary);border-radius:8px;padding:14px">
+            <div style="font-weight:600;margin-bottom:4px">🔓 Lien public (lecture seule)</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-bottom:10px">Toute personne avec le lien peut consulter</div>
+            <button class="btn-secondary" onclick="createShareLink('view')" style="width:100%">Créer le lien</button>
+          </div>
+          <div style="background:var(--bg-secondary);border-radius:8px;padding:14px">
+            <div style="font-weight:600;margin-bottom:4px">✏️ Lien avec modification</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-bottom:10px">Toute personne avec le lien peut modifier</div>
+            <button class="btn-secondary" onclick="createShareLink('edit')" style="width:100%">Créer le lien</button>
+          </div>
+        </div>
+        <div id="perm-link-result" style="margin-top:12px;display:none">
+          <label class="modal-label">Lien généré</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="perm-link-url" class="modal-input" readonly style="flex:1">
+            <button class="btn-secondary" onclick="copyShareLink()">Copier</button>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="modal-field">
-      <label>Message (optionnel)</label>
-      <textarea id="share-message" placeholder="Bonjour, je vous partage ce document..."></textarea>
-    </div>
-    <div class="modal-actions">
-      <button class="modal-btn" onclick="closeShareModal()">Annuler</button>
-      <button class="modal-btn primary" onclick="doShare()">
-        <span id="share-btn-text">Envoyer l'invitation</span>
-      </button>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closePermissionsModal()">Fermer</button>
     </div>
   </div>
 </div>
@@ -922,12 +969,138 @@ async function ctxDelete() {
 
 // ─── PARTAGE ──────────────────────────────────────────────────────────────────
 function ctxShare() {
+  showPermissionsModal();
+}
+
+// ─── GESTION DES PERMISSIONS ─────────────────────────────────────────────────
+async function showPermissionsModal() {
   if (!ctxTarget) return;
-  document.getElementById('share-item-name').textContent = ctxTarget.name;
-  document.getElementById('share-emails').value = '';
-  document.getElementById('share-message').value = '';
-  document.getElementById('share-role').value = 'read';
-  document.getElementById('share-modal').classList.add('open');
+  document.getElementById('perm-title').textContent = ctxTarget.name;
+  document.getElementById('permissions-modal').classList.add('open');
+  switchPermTab('members');
+  await loadPermissions();
+}
+
+function closePermissionsModal() {
+  document.getElementById('permissions-modal').classList.remove('open');
+}
+
+function switchPermTab(tab) {
+  ['members','add','link'].forEach(t => {
+    document.getElementById('perm-tab-'+t).style.display = t === tab ? '' : 'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t === tab);
+  });
+}
+
+async function loadPermissions() {
+  const list = document.getElementById('perm-members-list');
+  list.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
+  try {
+    const data = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions');
+    const perms = data.value || [];
+    if (!perms.length) { list.innerHTML = '<div class="trash-empty">Aucun accès configuré</div>'; return; }
+    list.innerHTML = perms.map(p => {
+      const isLink = p.link;
+      if (isLink) {
+        const linkType = p.link.type === 'view' ? '👁 Lecture' : '✏️ Modification';
+        const linkScope = p.link.scope === 'anonymous' ? 'Public (sans connexion)' : 'Organisation';
+        const url = (p.link.webUrl||'').replace(/'/g,"\'");
+        const shortUrl = (p.link.webUrl||'').substring(0,55)+'...';
+        return '<div class="perm-member-row">'
+          +'<div class="perm-avatar" style="background:#f39c12">🔗</div>'
+          +'<div class="perm-member-info">'
+          +'<div class="perm-member-name">'+linkType+' — '+linkScope+'</div>'
+          +'<div class="perm-member-email" style="cursor:pointer;color:var(--accent)" onclick="navigator.clipboard.writeText(''+url+'');alert('Lien copié !')">'+shortUrl+' (cliquer pour copier)</div>'
+          +'</div>'
+          +'<button class="perm-remove-btn" onclick="removePermission(''+p.id+'')" title="Supprimer">✕</button>'
+          +'</div>';
+      }
+      const user = (p.grantedTo && p.grantedTo.user) || (p.grantedToV2 && p.grantedToV2.user) || {};
+      const name = user.displayName || user.email || 'Utilisateur inconnu';
+      const email = user.email || '';
+      const initials = name.split(' ').map(function(w){return w[0]||'';}).slice(0,2).join('').toUpperCase();
+      const role = (p.roles && p.roles[0]) || 'read';
+      const isOwner = role === 'owner';
+      return '<div class="perm-member-row">'
+        +'<div class="perm-avatar">'+initials+'</div>'
+        +'<div class="perm-member-info">'
+        +'<div class="perm-member-name">'+name+(isOwner?' <span style="font-size:10px;background:#f39c12;color:white;padding:2px 6px;border-radius:10px">Propriétaire</span>':'')+'</div>'
+        +'<div class="perm-member-email">'+email+'</div>'
+        +'</div>'
+        +(isOwner ? '' :
+          '<select class="perm-role-select" onchange="updatePermission(''+p.id+'', this.value)">'
+          +'<option value="read"'+(role==='read'?' selected':'')+'>Lecture</option>'
+          +'<option value="write"'+(role==='write'?' selected':'')+'>Modification</option>'
+          +'</select>'
+          +'<button class="perm-remove-btn" onclick="removePermission(''+p.id+'')" title="Supprimer">✕</button>')
+        +'</div>';
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="trash-empty" style="color:#e74c3c">Erreur: '+e.message+'</div>';
+  }
+}
+
+async function addPermission() {
+  const email = document.getElementById('perm-add-email').value.trim();
+  const role = document.getElementById('perm-add-role').value;
+  if (!email) { alert('Veuillez saisir un email.'); return; }
+  const btn = document.querySelector('#perm-tab-add .btn-primary');
+  btn.textContent = 'Ajout en cours...'; btn.disabled = true;
+  try {
+    await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/invite', 'POST', {
+      requireSignIn: true, sendInvitation: false,
+      roles: [role], recipients: [{ email: email }]
+    });
+    document.getElementById('perm-add-email').value = '';
+    switchPermTab('members');
+    await loadPermissions();
+    alert('Accès accordé à '+email);
+  } catch(e) {
+    alert('Erreur: '+e.message);
+  } finally {
+    btn.textContent = "Ajouter l'accès"; btn.disabled = false;
+  }
+}
+
+async function updatePermission(permId, newRole) {
+  try {
+    await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions/'+permId, 'PATCH', { roles: [newRole] });
+  } catch(e) {
+    alert('Erreur modification: '+e.message);
+    await loadPermissions();
+  }
+}
+
+async function removePermission(permId) {
+  if (!confirm('Supprimer cet accès ?')) return;
+  try {
+    await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions/'+permId, 'DELETE');
+    await loadPermissions();
+  } catch(e) {
+    alert('Erreur suppression: '+e.message);
+  }
+}
+
+async function createShareLink(type) {
+  try {
+    const res = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/createLink', 'POST', {
+      type: type === 'view' ? 'view' : 'edit', scope: 'anonymous'
+    });
+    const url = (res.link && res.link.webUrl) || '';
+    document.getElementById('perm-link-url').value = url;
+    document.getElementById('perm-link-result').style.display = '';
+  } catch(e) {
+    if (e.message.includes('AnonymousLinkCreation') || e.message.includes('disabled')) {
+      alert('Les liens anonymes sont désactivés sur ce tenant.\nActivez-les dans : Centre admin SharePoint > Stratégies > Partage.');
+    } else {
+      alert('Erreur: '+e.message);
+    }
+  }
+}
+
+function copyShareLink() {
+  navigator.clipboard.writeText(document.getElementById('perm-link-url').value);
+  alert('Lien copié !');
 }
 
 function closeShareModal() { document.getElementById('share-modal').classList.remove('open'); }
@@ -989,11 +1162,18 @@ async function doShare() {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(mailBody)
       });
-      if (!mailRes.ok) throw new Error(await mailRes.text());
+      if (!mailRes.ok) {
+        const errText = await mailRes.text();
+        if (errText.includes('MailboxNotEnabledForRESTAPI') || errText.includes('inactive') || errText.includes('on-premise')) {
+          console.warn('Email non envoyé (boîte non Exchange Online) - partage accordé quand même');
+        } else {
+          throw new Error(errText);
+        }
+      }
     }
     
     closeShareModal();
-    alert(`✅ Invitation envoyée à : ${emails.join(', ')}`);
+    alert(`✅ Droits accordés à : ${emails.join(', ')}\n\n(Email de notification non envoyé : boîte mail non compatible Exchange Online)`);
   } catch(e) {
     alert('Erreur partage: '+e.message);
   } finally {
