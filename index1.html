@@ -286,8 +286,7 @@
         <label class="modal-label" style="margin-top:12px">Droits</label>
         <select id="perm-add-role" class="modal-input">
           <option value="read">Lecture seule</option>
-          <option value="write" selected>Modification (sans suppression totale)</option>
-          <option value="owner">Contrôle total</option>
+          <option value="write" selected>Lecture et modification</option>
         </select>
         <label class="modal-label" style="margin-top:12px">Message (optionnel)</label>
         <textarea id="perm-add-message" class="modal-input" rows="2" placeholder="Bonjour, je vous partage ce document..."></textarea>
@@ -993,85 +992,47 @@ function switchPermTab(tab) {
   });
 }
 
-// Convertir les rôles Graph en 3 niveaux simplifiés
-function simplifyRole(roles) {
-  if (!roles || !roles.length) return 'read';
-  const r = roles[0];
-  if (r === 'owner') return 'owner';
-  if (r === 'write' || r === 'sp.full control' || r === 'design') return 'write';
-  return 'read';
-}
-
-function roleLabel(r) {
-  if (r === 'owner') return 'Contrôle total';
-  if (r === 'write') return 'Modification';
-  return 'Lecture seule';
-}
-
-function roleBadgeColor(r) {
-  if (r === 'owner') return '#e67e22';
-  if (r === 'write') return '#2f6fd4';
-  return '#27ae60';
-}
-
 async function loadPermissions() {
   const list = document.getElementById('perm-members-list');
   list.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
   try {
     const data = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions');
     const perms = data.value || [];
-
-    // Filtrer : ignorer les groupes SharePoint système, garder users + liens
-    const filtered = perms.filter(p => {
-      if (p.link) return true; // liens de partage → toujours afficher
-      const user = (p.grantedTo && p.grantedTo.user) || (p.grantedToV2 && p.grantedToV2.user);
-      return user && user.email; // uniquement les vrais utilisateurs avec email
-    });
-
-    if (!filtered.length) {
-      list.innerHTML = '<div class="trash-empty" style="padding:20px;text-align:center">Aucun accès individuel configuré</div>';
-      return;
-    }
-
-    list.innerHTML = filtered.map(p => {
-      // Lien de partage
-      if (p.link) {
-        const lType = p.link.type === 'view' ? 'Lecture seule' : 'Modification';
-        const lScope = p.link.scope === 'anonymous' ? 'Sans connexion' : 'Avec connexion';
-        const url = (p.link.webUrl||'');
-        const shortUrl = url.substring(0,50)+'...';
+    if (!perms.length) { list.innerHTML = '<div class="trash-empty">Aucun accès configuré</div>'; return; }
+    list.innerHTML = perms.map(p => {
+      const isLink = p.link;
+      if (isLink) {
+        const linkType = p.link.type === 'view' ? '👁 Lecture' : '✏️ Modification';
+        const linkScope = p.link.scope === 'anonymous' ? 'Public (sans connexion)' : 'Organisation';
+        const url = (p.link.webUrl||'').replace(/'/g,"\'");
+        const shortUrl = (p.link.webUrl||'').substring(0,55)+'...';
         return '<div class="perm-member-row">'
-          +'<div class="perm-avatar" style="background:#8e44ad">🔗</div>'
+          +'<div class="perm-avatar" style="background:#f39c12">🔗</div>'
           +'<div class="perm-member-info">'
-          +'<div class="perm-member-name">Lien — '+lType+' <span style="font-size:10px;background:#8e44ad;color:white;padding:2px 6px;border-radius:10px">'+lScope+'</span></div>'
-          +'<div class="perm-member-email" style="cursor:pointer;color:var(--accent)" onclick="copyAndAlert(this.dataset.url)" data-url="'+url+'">'+shortUrl+' (copier)</div>'
+          +'<div class="perm-member-name">'+linkType+' — '+linkScope+'</div>'
+          +'<div class="perm-member-email" style="cursor:pointer;color:var(--accent)" onclick="copyAndAlert(this.dataset.url)" data-url="'+url+'">'+shortUrl+' (cliquer pour copier)</div>'
           +'</div>'
-          +'<button class="perm-remove-btn" data-id="'+p.id+'" onclick="removePermission(this.dataset.id)" title="Révoquer le lien">✕</button>'
+          +'<button class="perm-remove-btn" data-id="'+p.id+'" onclick="removePermission(this.dataset.id)" title="Supprimer">✕</button>'
           +'</div>';
       }
-
-      // Utilisateur individuel
       const user = (p.grantedTo && p.grantedTo.user) || (p.grantedToV2 && p.grantedToV2.user) || {};
-      const name = user.displayName || user.email || 'Inconnu';
+      const name = user.displayName || user.email || 'Utilisateur inconnu';
       const email = user.email || '';
       const initials = name.split(' ').map(function(w){return w[0]||'';}).slice(0,2).join('').toUpperCase();
-      const role = simplifyRole(p.roles);
+      const role = (p.roles && p.roles[0]) || 'read';
       const isOwner = role === 'owner';
-
       return '<div class="perm-member-row">'
         +'<div class="perm-avatar">'+initials+'</div>'
         +'<div class="perm-member-info">'
-        +'<div class="perm-member-name">'+name+'</div>'
+        +'<div class="perm-member-name">'+name+(isOwner?' <span style="font-size:10px;background:#f39c12;color:white;padding:2px 6px;border-radius:10px">Propriétaire</span>':'')+'</div>'
         +'<div class="perm-member-email">'+email+'</div>'
         +'</div>'
-        +'<span style="font-size:11px;background:'+roleBadgeColor(role)+';color:white;padding:3px 8px;border-radius:10px;white-space:nowrap">'+roleLabel(role)+'</span>'
         +(isOwner ? '' :
-          '<select class="perm-role-select" data-id="'+p.id+'" onchange="updatePermission(this.dataset.id, this.value)" style="margin-left:8px">'
+          '<select class="perm-role-select" data-id="'+p.id+'" onchange="updatePermission(this.dataset.id, this.value)">'
           +'<option value="read"'+(role==='read'?' selected':'')+'>Lecture</option>'
           +'<option value="write"'+(role==='write'?' selected':'')+'>Modification</option>'
-          +'<option value="owner"'+(role==='owner'?' selected':'')+'>Contrôle total</option>'
           +'</select>'
-          +'<button class="perm-remove-btn" data-id="'+p.id+'" onclick="removePermission(this.dataset.id)" title="Supprimer l'accès">✕</button>')
+          +'<button class="perm-remove-btn" data-id="'+p.id+'" onclick="removePermission(this.dataset.id)" title="Supprimer">✕</button>')
         +'</div>';
     }).join('');
   } catch(e) {
