@@ -1114,13 +1114,11 @@ async function addPermissionSP(email, role) {
   const itemPath = ctxTarget.url.replace(SP_SITE_URL, '').replace('/Documents/', '/Documents/').split('?')[0];
   const roleId = SP_ROLE_IDS[role] || SP_ROLE_IDS.read;
 
-  const breakRes = await fetch(SP_SITE_URL+'/_api/web/GetFileByServerRelativeUrl(''+itemPath+'')/ListItemAllFields/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)', {
-    method: 'POST', headers
-  });
+  const breakUrl = SP_SITE_URL+'/_api/web/GetFileByServerRelativeUrl(%27'+encodeURIComponent(itemPath)+'%27)/ListItemAllFields/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)';
+  const breakRes = await fetch(breakUrl, { method: 'POST', headers });
 
-  const assignRes = await fetch(SP_SITE_URL+'/_api/web/GetFileByServerRelativeUrl(''+itemPath+'')/ListItemAllFields/roleassignments/addroleassignment(principalid='+userId+',roledefid='+roleId+')', {
-    method: 'POST', headers
-  });
+  const assignUrl = SP_SITE_URL+'/_api/web/GetFileByServerRelativeUrl(%27'+encodeURIComponent(itemPath)+'%27)/ListItemAllFields/roleassignments/addroleassignment(principalid='+userId+',roledefid='+roleId+')';
+  const assignRes = await fetch(assignUrl, { method: 'POST', headers });
   if (!assignRes.ok) throw new Error('Erreur assignation rôle');
 }
 
