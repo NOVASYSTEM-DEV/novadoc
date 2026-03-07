@@ -1071,7 +1071,7 @@ async function loadPermissions() {
           +'<option value="write"'+(role==='write'?' selected':'')+'>Modification</option>'
           +'<option value="owner"'+(role==='owner'?' selected':'')+'>Contrôle total</option>'
           +'</select>'
-          +'<button class="perm-remove-btn" data-id="'+p.id+'" onclick="removePermission(this.dataset.id)" title="Supprimer l'accès">✕</button>')
+          +'<button class="perm-remove-btn" data-id="'+p.id+'" onclick="removePermission(this.dataset.id)" title="Supprimer">✕</button>')
         +'</div>';
     }).join('');
   } catch(e) {
