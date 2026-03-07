@@ -241,7 +241,7 @@
     Télécharger
   </div>
   <div class="ctx-sep"></div>
-  <div class="ctx-item" onclick="showPermissionsModal()">
+  <div class="ctx-item" id="ctx-permissions" onclick="showPermissionsModal()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
     Gérer les accès
   </div>
@@ -483,9 +483,12 @@ async function getToken() {
   }
 }
 
+let currentUserEmail = '';
+
 async function afterLogin(account) {
   await getToken();
   const name = account.name || account.username;
+  currentUserEmail = (account.username || '').toLowerCase();
   const initials = name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
   document.getElementById('user-name').textContent = name;
   document.getElementById('user-avatar').textContent = initials;
@@ -809,6 +812,12 @@ function attachItemEvents(content, items) {
       e.preventDefault();
       const { id, name, type, url } = el.dataset;
       ctxTarget = { id, name, type, url, parentPath: el.dataset.parentPath, createdBy: el.dataset.createdBy||'' };
+    const isCreator = !ctxTarget.createdBy || ctxTarget.createdBy.toLowerCase() === currentUserEmail;
+    // Masquer Supprimer et Gérer les accès si pas créateur
+    const deleteBtn = document.getElementById('ctx-delete');
+    const permBtn = document.getElementById('ctx-permissions');
+    if (deleteBtn) deleteBtn.style.display = isCreator ? '' : 'none';
+    if (permBtn) permBtn.style.display = isCreator ? '' : 'none';
       // Si item pas dans sélection, reset sélection
       if (!selectedItems.find(s=>s.id===id)) clearSelection();
       showCtxMenu(e, type);
@@ -1310,6 +1319,15 @@ async function pasteItems() {
 
 async function selDelete() {
   if (!selectedItems.length) return;
+  const notOwned = selectedItems.filter(s => {
+    const el = document.querySelector('[data-id="'+s.id+'"]');
+    const createdBy = (el && el.dataset.createdBy || '').toLowerCase();
+    return createdBy && createdBy !== currentUserEmail;
+  });
+  if (notOwned.length > 0) {
+    alert('Vous ne pouvez pas supprimer ' + notOwned.length + ' élément(s) dont vous n\'êtes pas le créateur :\n' + notOwned.map(s=>s.name).join(', '));
+    return;
+  }
   if (!confirm(`Supprimer ${selectedItems.length} élément(s) ?\n\nLes éléments seront récupérables pendant 30 jours par l'administrateur.`)) return;
   const toDelete = [...selectedItems];
   clearSelection();
