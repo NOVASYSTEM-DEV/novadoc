@@ -271,27 +271,31 @@
     <div class="modal-body" style="padding:0">
       <!-- Tabs -->
       <div style="display:flex;border-bottom:1px solid var(--border)">
-        <button class="perm-tab active" id="tab-members" onclick="switchPermTab('members')">👥 Membres actuels</button>
+        <button class="perm-tab active" id="tab-members" onclick="switchPermTab('members')">👥 Membres</button>
         <button class="perm-tab" id="tab-add" onclick="switchPermTab('add')">➕ Ajouter</button>
-        <button class="perm-tab" id="tab-link" onclick="switchPermTab('link')">🔗 Lien de partage</button>
+        <button class="perm-tab" id="tab-link" onclick="switchPermTab('link')">🔗 Lien</button>
       </div>
-      <!-- Tab membres -->
+      <!-- Tab membres (groupes NOVADOC) -->
       <div id="perm-tab-members" style="padding:16px">
         <div id="perm-members-list"><div class="loading"><div class="spinner"></div> Chargement...</div></div>
       </div>
       <!-- Tab ajouter -->
       <div id="perm-tab-add" style="padding:16px;display:none">
-        <label class="modal-label">Email ou nom (compte Microsoft)</label>
+        <label class="modal-label">Email (compte Microsoft)</label>
         <input type="text" id="perm-add-email" class="modal-input" placeholder="prenom.nom@domaine.com">
-        <label class="modal-label" style="margin-top:12px">Droits</label>
-        <select id="perm-add-role" class="modal-input">
-          <option value="read">Lecture seule</option>
-          <option value="write" selected>Modification (sans suppression totale)</option>
-          <option value="owner">Contrôle total</option>
+        <label class="modal-label" style="margin-top:12px">Niveau d'accès</label>
+        <select id="perm-add-group" class="modal-input">
+          <option value="30">Affichage seul</option>
+          <option value="29">Lecture</option>
+          <option value="28" selected>Collaboration</option>
+          <option value="27">Modification</option>
+          <option value="26">Contrôle total</option>
         </select>
-        <label class="modal-label" style="margin-top:12px">Message (optionnel)</label>
-        <textarea id="perm-add-message" class="modal-input" rows="2" placeholder="Bonjour, je vous partage ce document..."></textarea>
-        <button class="btn-primary" style="margin-top:12px;width:100%" onclick="addPermission()">Ajouter l'accès</button>
+        <div id="perm-role-desc" style="font-size:12px;color:var(--text-muted);margin-top:6px;padding:8px;background:var(--bg-secondary);border-radius:6px">
+          Peut ajouter et modifier des documents
+        </div>
+        <button class="btn-primary" style="margin-top:14px;width:100%" onclick="addPermission()">➕ Ajouter au groupe</button>
+        <div id="perm-add-status" style="margin-top:8px;font-size:13px;text-align:center"></div>
       </div>
       <!-- Tab lien -->
       <div id="perm-tab-link" style="padding:16px;display:none">
@@ -1047,7 +1051,25 @@ function switchPermTab(tab) {
     document.getElementById('perm-tab-'+t).style.display = t === tab ? '' : 'none';
     document.getElementById('tab-'+t).classList.toggle('active', t === tab);
   });
+  if (tab === 'add') updateRoleDesc();
 }
+
+const SP_GROUP_DESCS = {
+  26: { text: 'Contrôle total sur le site — peut tout faire', color: '#c0392b' },
+  27: { text: 'Peut ajouter, modifier et supprimer des documents', color: '#2980b9' },
+  28: { text: 'Peut ajouter et modifier des documents (sans suppression)', color: '#27ae60' },
+  29: { text: 'Peut lire et télécharger les documents', color: '#7f8c8d' },
+  30: { text: 'Peut consulter sans télécharger', color: '#95a5a6' },
+};
+
+function updateRoleDesc() {
+  const sel = document.getElementById('perm-add-role');
+  const desc = document.getElementById('perm-role-desc');
+  if (!sel || !desc) return;
+  const d = SP_GROUP_DESCS[parseInt(sel.value)];
+  if (d) { desc.textContent = d.text; desc.style.borderLeft = '3px solid '+d.color; desc.style.paddingLeft = '10px'; }
+}
+
 
 // Convertir les rôles Graph en 3 niveaux simplifiés
 function simplifyRole(roles) {
@@ -1070,128 +1092,141 @@ function roleBadgeColor(r) {
   return '#27ae60';
 }
 
+// ─── Helpers REST SharePoint avec token MSAL ─────────────────────────────────
+async function getSpToken() {
+  const accounts = msalInstance.getAllAccounts();
+  if (!accounts.length) return null;
+  try {
+    const r = await msalInstance.acquireTokenSilent({
+      scopes: ['https://novasystemfr.sharepoint.com/AllSites.Manage'],
+      account: accounts[0]
+    });
+    return r.accessToken;
+  } catch {
+    const r = await msalInstance.acquireTokenPopup({
+      scopes: ['https://novasystemfr.sharepoint.com/AllSites.Manage'],
+      account: accounts[0]
+    });
+    return r.accessToken;
+  }
+}
+async function spGetDigest(token) {
+  const r = await fetch(SP_SITE_URL+'/_api/contextinfo', { method:'POST', headers:{ Authorization:'Bearer '+token, Accept:'application/json;odata=verbose', 'Content-Type':'application/json;odata=verbose' }});
+  const d = await r.json();
+  return d.d.GetContextWebInformation.FormDigestValue;
+}
+async function spRestGet(url) {
+  const token = await getSpToken();
+  const res = await fetch(url, { headers: { Authorization: 'Bearer '+token, Accept: 'application/json;odata=verbose' } });
+  if (!res.ok) throw new Error('SP REST '+res.status);
+  return res.json();
+}
+async function spRestPost(url, body) {
+  const token = await getSpToken();
+  const digest = await spGetDigest(token);
+  const h = { Authorization:'Bearer '+token, Accept:'application/json;odata=verbose', 'Content-Type':'application/json;odata=verbose', 'X-RequestDigest': digest };
+  const res = await fetch(url, { method:'POST', headers:h, body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) { const t = await res.text(); throw new Error('SP REST '+res.status+' '+t.substring(0,300)); }
+  return res.status === 204 ? null : res.json();
+}
+
+// ─── Charger membres des groupes NOVADOC ─────────────────────────────────────
 async function loadPermissions() {
   const list = document.getElementById('perm-members-list');
-  list.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
+  list.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement des groupes NOVADOC...</div>';
   try {
-    const data = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions');
-    const perms = data.value || [];
+    const results = await Promise.all(SP_GROUPS.map(async g => {
+      try {
+        const data = await spRestGet(SP_SITE_URL+'/_api/web/sitegroups/getbyid('+g.id+')/users');
+        const users = (data.d && data.d.results) || [];
+        return { group: g, users, error: null };
+      } catch(e) {
+        return { group: g, users: [], error: e.message };
+      }
+    }));
 
-    // Filtrer : ignorer les groupes SharePoint système, garder users + liens
-    const filtered = perms.filter(p => {
-      if (p.link) return true; // liens de partage → toujours afficher
-      const user = (p.grantedTo && p.grantedTo.user) || (p.grantedToV2 && p.grantedToV2.user);
-      return user && user.email; // uniquement les vrais utilisateurs avec email
+    let html = '';
+    results.forEach(({ group, users, error }) => {
+      html += '<div style="margin-bottom:16px">';
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);margin-bottom:8px">';
+      html += '<span style="background:'+group.color+';color:white;font-size:11px;font-weight:600;padding:3px 10px;border-radius:10px">'+group.label+'</span>';
+      html += '<span style="font-size:11px;color:var(--text-muted)">'+group.name+'</span>';
+      html += '<button onclick="novadocSetGroup('+group.id+')" style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:white;cursor:pointer;color:var(--accent)">+ Ajouter</button>';
+      html += '</div>';
+      if (error) {
+        html += '<div style="font-size:12px;color:#e74c3c;padding:4px 0">Erreur: '+error+'</div>';
+      } else if (!users.length) {
+        html += '<div style="font-size:12px;color:var(--text-muted);padding:4px 0;font-style:italic">Aucun membre</div>';
+      } else {
+        users.forEach(u => {
+          if (u.IsHiddenInUI) return;
+          const name = u.Title || u.LoginName || 'Inconnu';
+          const email = u.Email || '';
+          const initials = name.split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+          html += '<div class="perm-member-row" style="padding:6px 0">';
+          html += '<div class="perm-avatar" style="width:28px;height:28px;font-size:10px">'+initials+'</div>';
+          html += '<div class="perm-member-info"><div class="perm-member-name">'+name+'</div><div class="perm-member-email">'+email+'</div></div>';
+          html += '<button class="perm-remove-btn" onclick="novadocRemoveFromGroup('+group.id+','+u.Id+',''+name.replace(/'/g,'')+'',''+group.label+'')" title="Retirer du groupe">✕</button>';
+          html += '</div>';
+        });
+      }
+      html += '</div>';
     });
 
-    if (!filtered.length) {
-      list.innerHTML = '<div class="trash-empty" style="padding:20px;text-align:center">Aucun accès individuel configuré</div>';
-      return;
-    }
-
-    list.innerHTML = filtered.map(p => {
-      // Lien de partage
-      if (p.link) {
-        const lType = p.link.type === 'view' ? 'Lecture seule' : 'Modification';
-        const lScope = p.link.scope === 'anonymous' ? 'Sans connexion' : 'Avec connexion';
-        const url = (p.link.webUrl||'');
-        const shortUrl = url.substring(0,50)+'...';
-        return '<div class="perm-member-row">'
-          +'<div class="perm-avatar" style="background:#8e44ad">🔗</div>'
-          +'<div class="perm-member-info">'
-          +'<div class="perm-member-name">Lien — '+lType+' <span style="font-size:10px;background:#8e44ad;color:white;padding:2px 6px;border-radius:10px">'+lScope+'</span></div>'
-          +'<div class="perm-member-email" style="cursor:pointer;color:var(--accent)" onclick="copyAndAlert(this.dataset.url)" data-url="'+url+'">'+shortUrl+' (copier)</div>'
-          +'</div>'
-          +'<button class="perm-remove-btn" data-id="'+p.id+'" onclick="removePermission(this.dataset.id)" title="Révoquer le lien">✕</button>'
-          +'</div>';
-      }
-
-      // Utilisateur individuel
-      const user = (p.grantedTo && p.grantedTo.user) || (p.grantedToV2 && p.grantedToV2.user) || {};
-      const name = user.displayName || user.email || 'Inconnu';
-      const email = user.email || '';
-      const initials = name.split(' ').map(function(w){return w[0]||'';}).slice(0,2).join('').toUpperCase();
-      const role = simplifyRole(p.roles);
-      const isOwner = role === 'owner';
-
-      return '<div class="perm-member-row">'
-        +'<div class="perm-avatar">'+initials+'</div>'
-        +'<div class="perm-member-info">'
-        +'<div class="perm-member-name">'+name+'</div>'
-        +'<div class="perm-member-email">'+email+'</div>'
-        +'</div>'
-        +'<span style="font-size:11px;background:'+roleBadgeColor(role)+';color:white;padding:3px 8px;border-radius:10px;white-space:nowrap">'+roleLabel(role)+'</span>'
-        +(isOwner ? '' :
-          '<select class="perm-role-select" data-id="'+p.id+'" onchange="updatePermission(this.dataset.id, this.value)" style="margin-left:8px">'
-          +'<option value="read"'+(role==='read'?' selected':'')+'>Lecture</option>'
-          +'<option value="write"'+(role==='write'?' selected':'')+'>Modification</option>'
-          +'<option value="owner"'+(role==='owner'?' selected':'')+'>Contrôle total</option>'
-          +'</select>'
-          +'<button class="perm-remove-btn" data-id="'+p.id+'" onclick="removePermission(this.dataset.id)" title="Supprimer">✕</button>')
-        +'</div>';
-    }).join('');
+    list.innerHTML = html || '<div style="padding:20px;text-align:center;color:var(--text-muted)">Aucun groupe trouvé</div>';
   } catch(e) {
-    list.innerHTML = '<div class="trash-empty" style="color:#e74c3c">Erreur: '+e.message+'</div>';
+    list.innerHTML = '<div style="color:#e74c3c;padding:16px">Erreur: '+e.message+'</div>';
   }
 }
 
-// Niveaux SharePoint :
-// read    = Lecture seule (roleDefId: 1073741826)
-// write   = Contribution = modifier SANS supprimer (roleDefId: 1073741827)  
-// owner   = Contrôle total (roleDefId: 1073741829)
-const SP_ROLE_IDS = { read: 1073741826, write: 1073741827, owner: 1073741829 };
-const SP_SITE_URL = 'https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL';
+function novadocSetGroup(groupId) {
+  const sel = document.getElementById('perm-add-group');
+  if (sel) sel.value = groupId;
+  switchPermTab('add');
+  document.getElementById('perm-add-email').focus();
+}
 
-async function addPermissionSP(email, role) {
-  // Via REST SharePoint : chercher l'utilisateur puis assigner le rôle fin
-  const token = await getToken();
-  const headers = { 'Authorization': 'Bearer '+token, 'Accept': 'application/json;odata=verbose', 'Content-Type': 'application/json;odata=verbose' };
-
-  // Résoudre l'utilisateur
-  const userRes = await fetch(SP_SITE_URL+'/_api/web/ensureuser', {
-    method: 'POST',
-    headers: { ...headers, 'X-RequestDigest': 'form-digest-value' },
-    body: JSON.stringify({ logonName: 'i:0#.f|membership|'+email })
-  });
-  if (!userRes.ok) throw new Error('Utilisateur introuvable: '+email);
-  const userData = await userRes.json();
-  const userId = userData.d.Id;
-
-  // Récupérer l'ID de l'élément SharePoint via son path
-  const itemPath = ctxTarget.url.replace(SP_SITE_URL, '').replace('/Documents/', '/Documents/').split('?')[0];
-  const roleId = SP_ROLE_IDS[role] || SP_ROLE_IDS.read;
-
-  const breakUrl = SP_SITE_URL+'/_api/web/GetFileByServerRelativeUrl(%27'+encodeURIComponent(itemPath)+'%27)/ListItemAllFields/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)';
-  const breakRes = await fetch(breakUrl, { method: 'POST', headers });
-
-  const assignUrl = SP_SITE_URL+'/_api/web/GetFileByServerRelativeUrl(%27'+encodeURIComponent(itemPath)+'%27)/ListItemAllFields/roleassignments/addroleassignment(principalid='+userId+',roledefid='+roleId+')';
-  const assignRes = await fetch(assignUrl, { method: 'POST', headers });
-  if (!assignRes.ok) throw new Error('Erreur assignation rôle');
+async function novadocRemoveFromGroup(groupId, userId, userName, groupLabel) {
+  if (!confirm('Retirer "'+userName+'" du groupe "'+groupLabel+'" ?')) return;
+  try {
+    await spRestPost(SP_SITE_URL+'/_api/web/sitegroups/getbyid('+groupId+')/users/removebyid('+userId+')', null);
+    await loadPermissions();
+  } catch(e) {
+    alert('Erreur suppression: '+e.message);
+  }
 }
 
 async function addPermission() {
   const email = document.getElementById('perm-add-email').value.trim();
-  const role = document.getElementById('perm-add-role').value;
+  const groupId = parseInt(document.getElementById('perm-add-group').value);
   if (!email) { alert('Veuillez saisir un email.'); return; }
+  if (!groupId) { alert('Veuillez choisir un groupe.'); return; }
   const btn = document.querySelector('#perm-tab-add .btn-primary');
   btn.textContent = 'Ajout en cours...'; btn.disabled = true;
   try {
-    // Essayer d'abord via REST SharePoint (gestion fine des droits)
-    try {
-      await addPermissionSP(email, role);
-    } catch(spErr) {
-      // Fallback Graph API si REST SharePoint échoue
-      console.warn('REST SP échoué, fallback Graph:', spErr.message);
-      const graphRole = role === 'owner' ? 'owner' : role === 'write' ? 'write' : 'read';
-      await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/invite', 'POST', {
-        requireSignIn: true, sendInvitation: false,
-        roles: [graphRole], recipients: [{ email: email }]
-      });
-    }
+    // Résoudre l'utilisateur puis l'ajouter au groupe SP
+    const token = await getSpToken();
+    const digest = await spGetDigest(token);
+    const h = { Authorization:'Bearer '+token, Accept:'application/json;odata=verbose', 'Content-Type':'application/json;odata=verbose', 'X-RequestDigest': digest };
+
+    // Ensure user
+    const euRes = await fetch(SP_SITE_URL+'/_api/web/ensureuser', { method:'POST', headers:h, body: JSON.stringify({ logonName: 'i:0#.f|membership|'+email }) });
+    if (!euRes.ok) throw new Error('Utilisateur introuvable ('+email+')');
+    const euData = await euRes.json();
+    const userId = euData.d ? euData.d.Id : null;
+    if (!userId) throw new Error('ID utilisateur non trouvé');
+
+    // Ajouter au groupe
+    const addRes = await fetch(SP_SITE_URL+'/_api/web/sitegroups/getbyid('+groupId+')/users', {
+      method:'POST', headers:h,
+      body: JSON.stringify({ '__metadata': { type: 'SP.User' }, LoginName: 'i:0#.f|membership|'+email })
+    });
+    if (!addRes.ok) { const t = await addRes.text(); throw new Error('Erreur ajout groupe: '+t.substring(0,200)); }
+
     document.getElementById('perm-add-email').value = '';
     switchPermTab('members');
     await loadPermissions();
-    alert('Accès accordé à '+email);
+    alert('✅ '+email+' ajouté avec succès !');
   } catch(e) {
     alert('Erreur: '+e.message);
   } finally {
@@ -1217,6 +1252,7 @@ async function removePermission(permId) {
     alert('Erreur suppression: '+e.message);
   }
 }
+
 
 async function createShareLink(type) {
   try {
