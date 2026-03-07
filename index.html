@@ -1054,6 +1054,14 @@ function switchPermTab(tab) {
   if (tab === 'add') updateRoleDesc();
 }
 
+const SP_GROUPS = [
+  { id: 26, label: 'Contrôle Total' },
+  { id: 27, label: 'Modification' },
+  { id: 28, label: 'Collaboration' },
+  { id: 29, label: 'Lecture' },
+  { id: 30, label: 'Affichage Seul' },
+];
+
 const SP_GROUP_DESCS = {
   26: { text: 'Contrôle total sur le site — peut tout faire', color: '#c0392b' },
   27: { text: 'Peut ajouter, modifier et supprimer des documents', color: '#2980b9' },
