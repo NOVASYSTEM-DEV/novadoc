@@ -1166,7 +1166,8 @@ async function loadPermissions() {
           html += '<div class="perm-member-row" style="padding:6px 0">';
           html += '<div class="perm-avatar" style="width:28px;height:28px;font-size:10px">'+initials+'</div>';
           html += '<div class="perm-member-info"><div class="perm-member-name">'+name+'</div><div class="perm-member-email">'+email+'</div></div>';
-          html += '<button class="perm-remove-btn" onclick="novadocRemoveFromGroup('+group.id+','+u.Id+',''+name.replace(/'/g,'')+'',''+group.label+'')" title="Retirer du groupe">✕</button>';
+          const safeName = (u.Title||u.LoginName||'').replace(/["']/g,''); const safeLabel = (group.label||'').replace(/["']/g,'');
+          html += '<button class="perm-remove-btn" onclick="novadocRemoveFromGroup('+group.id+','+u.Id+',\"'+safeName+'\",\"'+safeLabel+'\")" title="Retirer du groupe">✕</button>';
           html += '</div>';
         });
       }
