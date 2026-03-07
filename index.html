@@ -485,12 +485,32 @@ async function getToken() {
 
 let currentUserEmail = '';
 let currentUserName = '';
+let currentUserIsOwner = false;
+
+async function checkUserIsOwner() {
+  try {
+    // Vérifier si l'utilisateur a le rôle owner sur le drive racine
+    const data = await graphCall('/drives/'+currentDriveId+'/root/permissions');
+    const perms = data.value || [];
+    currentUserIsOwner = perms.some(p => {
+      const user = (p.grantedTo && p.grantedTo.user) || (p.grantedToV2 && p.grantedToV2.user) || {};
+      const email = (user.email||'').toLowerCase();
+      const name = (user.displayName||'').toLowerCase();
+      return (email === currentUserEmail || name === currentUserName) && p.roles && p.roles.includes('owner');
+    });
+    console.log('Owner:', currentUserIsOwner);
+  } catch(e) {
+    currentUserIsOwner = false;
+  }
+}
 
 async function afterLogin(account) {
   await getToken();
   const name = account.name || account.username;
   currentUserEmail = (account.username || '').toLowerCase();
   currentUserName = (account.name || '').toLowerCase();
+  // Vérifier si l'utilisateur est owner du site (admin SharePoint)
+  checkUserIsOwner();
   const initials = name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
   document.getElementById('user-name').textContent = name;
   document.getElementById('user-avatar').textContent = initials;
@@ -819,8 +839,10 @@ function attachItemEvents(content, items) {
     const isCreator = createdByLower && (createdByLower === currentUserEmail || createdByLower === currentUserName);
     const deleteBtn = document.getElementById('ctx-delete');
     const permBtn = document.getElementById('ctx-permissions');
-    if (deleteBtn) deleteBtn.style.display = isCreator ? '' : 'none';
-    if (permBtn) permBtn.style.display = isCreator ? '' : 'none';
+    // Afficher si créateur OU contrôle total
+    const canManage = isCreator || currentUserIsOwner;
+    if (deleteBtn) deleteBtn.style.display = canManage ? '' : 'none';
+    if (permBtn) permBtn.style.display = canManage ? '' : 'none';
       // Si item pas dans sélection, reset sélection
       if (!selectedItems.find(s=>s.id===id)) clearSelection();
       showCtxMenu(e, type);
@@ -974,7 +996,8 @@ async function ctxVersions() {
 async function ctxDelete() {
   if (!ctxTarget) return;
   const createdByLower = (ctxTarget.createdBy||'').toLowerCase();
-  if (!createdByLower || (createdByLower !== currentUserEmail && createdByLower !== currentUserName)) {
+  const isCreator = createdByLower && (createdByLower === currentUserEmail || createdByLower === currentUserName);
+  if (!isCreator && !currentUserIsOwner) {
     alert('Vous ne pouvez pas supprimer cet élément car vous n\'en êtes pas le créateur.');
     return;
   }
@@ -1369,14 +1392,16 @@ async function pasteItems() {
 
 async function selDelete() {
   if (!selectedItems.length) return;
-  const notOwned = selectedItems.filter(s => {
-    const el = document.querySelector('[data-id="'+s.id+'"]');
-    const createdBy = (el && el.dataset.createdBy || '').toLowerCase();
-    return createdBy && createdBy !== currentUserEmail;
-  });
-  if (notOwned.length > 0) {
-    alert('Vous ne pouvez pas supprimer ' + notOwned.length + ' élément(s) dont vous n\'êtes pas le créateur :\n' + notOwned.map(s=>s.name).join(', '));
-    return;
+  if (!currentUserIsOwner) {
+    const notOwned = selectedItems.filter(s => {
+      const el = document.querySelector('[data-id="'+s.id+'"]');
+      const createdBy = (el && el.dataset.createdBy || '').toLowerCase();
+      return createdBy && createdBy !== currentUserEmail && createdBy !== currentUserName;
+    });
+    if (notOwned.length > 0) {
+      alert('Vous ne pouvez pas supprimer ' + notOwned.length + ' élément(s) dont vous n\'êtes pas le créateur :\n' + notOwned.map(s=>s.name).join(', '));
+      return;
+    }
   }
   if (!confirm(`Supprimer ${selectedItems.length} élément(s) ?\n\nLes éléments seront récupérables pendant 30 jours par l'administrateur.`)) return;
   const toDelete = [...selectedItems];
