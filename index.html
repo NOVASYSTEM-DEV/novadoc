@@ -484,11 +484,13 @@ async function getToken() {
 }
 
 let currentUserEmail = '';
+let currentUserName = '';
 
 async function afterLogin(account) {
   await getToken();
   const name = account.name || account.username;
   currentUserEmail = (account.username || '').toLowerCase();
+  currentUserName = (account.name || '').toLowerCase();
   const initials = name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
   document.getElementById('user-name').textContent = name;
   document.getElementById('user-avatar').textContent = initials;
@@ -812,8 +814,9 @@ function attachItemEvents(content, items) {
       e.preventDefault();
       const { id, name, type, url } = el.dataset;
       ctxTarget = { id, name, type, url, parentPath: el.dataset.parentPath, createdBy: el.dataset.createdBy||'' };
-    const isCreator = !ctxTarget.createdBy || ctxTarget.createdBy.toLowerCase() === currentUserEmail;
-    // Masquer Supprimer et Gérer les accès si pas créateur
+    // isCreator : doit avoir un email ET correspondre à l'utilisateur connecté
+    const createdByLower = (ctxTarget.createdBy||'').toLowerCase();
+    const isCreator = createdByLower && (createdByLower === currentUserEmail || createdByLower === currentUserName);
     const deleteBtn = document.getElementById('ctx-delete');
     const permBtn = document.getElementById('ctx-permissions');
     if (deleteBtn) deleteBtn.style.display = isCreator ? '' : 'none';
@@ -970,6 +973,11 @@ async function ctxVersions() {
 
 async function ctxDelete() {
   if (!ctxTarget) return;
+  const createdByLower = (ctxTarget.createdBy||'').toLowerCase();
+  if (!createdByLower || (createdByLower !== currentUserEmail && createdByLower !== currentUserName)) {
+    alert('Vous ne pouvez pas supprimer cet élément car vous n\'en êtes pas le créateur.');
+    return;
+  }
   if (!confirm(`Supprimer "${ctxTarget.name}" ?\n\nL'élément sera récupérable pendant 30 jours par l'administrateur.`)) return;
   try {
     await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}`, 'DELETE');
