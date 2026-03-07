@@ -1610,14 +1610,6 @@ function toggleNewMenu(e) {
 }
 document.addEventListener('click', () => document.getElementById('new-menu')?.classList.remove('open'));
 
-// Message d'erreur permission lisible
-function permissionErrorMsg(e) {
-  if (e.message && (e.message.includes('403') || e.message.includes('accessDenied') || e.message.includes('Access denied'))) {
-    return 'Vous n\'avez pas les droits pour effectuer cette action dans ce répertoire.\n\nContactez l\'administrateur pour obtenir les droits nécessaires.';
-  }
-  return 'Erreur: ' + e.message;
-}
-
 async function createNew(type) {
   document.getElementById('new-menu').classList.remove('open');
   const folderId = currentPath.length===0 ? 'root' : currentPath[currentPath.length-1].id;
@@ -1631,7 +1623,7 @@ async function createNew(type) {
       });
       await loadCurrentFolder();
       await loadTree(true);
-    } catch(e) { alert(permissionErrorMsg(e)); }
+    } catch(e) { alert('Erreur: '+e.message); }
     return;
   }
 
@@ -1693,8 +1685,7 @@ async function uploadFiles(files) {
       });
     }
     await loadCurrentFolder();
-  } catch(e) { alert(permissionErrorMsg(e)); }
-  finally { hideLoading(); }
+  } catch(e) { alert('Erreur upload: '+e.message); }
 }
 
 // Drag & drop fichiers depuis bureau
