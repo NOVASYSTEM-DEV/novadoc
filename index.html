@@ -612,10 +612,9 @@ function buildTreeNodes(items, container, depth) {
           }
         } catch{}
       }
-      // Toggle ouverture
-      const isOpen = childContainer.classList.contains('open');
-      childContainer.classList.toggle('open', !isOpen);
-      el.querySelector('.tree-toggle').classList.toggle('open', !isOpen);
+      // Toujours ouvrir, jamais refermer au clic de navigation
+      childContainer.classList.add('open');
+      el.querySelector('.tree-toggle').classList.add('open');
     });
     wrapper.appendChild(el); wrapper.appendChild(childContainer); container.appendChild(wrapper);
   });
