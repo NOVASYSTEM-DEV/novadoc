@@ -488,12 +488,11 @@ async function navigateTo(path) {
 
 async function expandTreeTo(path) {
   for (const segment of path) {
-    let treeEl = document.querySelector(`.tree-item[data-id="${segment.id}"]`);
+    const treeEl = document.querySelector(`.tree-item[data-id="${segment.id}"]`);
     if (!treeEl) continue;
     const wrapper = treeEl.parentElement;
     const childContainer = wrapper ? wrapper.querySelector('.tree-children') : null;
-    const toggle = treeEl.querySelector('.tree-toggle');
-    // Charger et afficher les enfants
+    const toggleBtn = treeEl.querySelector('.tree-toggle');
     if (childContainer) {
       if (!childContainer.dataset.loaded) {
         childContainer.dataset.loaded = '1';
@@ -502,14 +501,13 @@ async function expandTreeTo(path) {
           if (d.value && d.value.length) {
             const depth = parseInt(treeEl.className.match(/depth-(\d)/)?.[1] || '0');
             buildTreeNodes(d.value, childContainer, depth + 1);
-            if (toggle) toggle.style.opacity = '1';
+            if (toggleBtn) toggleBtn.querySelector('svg').style.opacity = '1';
           }
         } catch {}
       }
       childContainer.classList.add('open');
-      if (toggle) toggle.classList.add('open');
+      if (toggleBtn) toggleBtn.classList.add('open');
     }
-    // Marquer actif
     document.querySelectorAll('.tree-item').forEach(el => el.classList.remove('active'));
     treeEl.classList.add('active');
     treeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -542,42 +540,75 @@ async function loadTree(forceReload=false) {
 }
 
 function buildTreeNodes(items, container, depth) {
-  items.filter(i=>i.folder).forEach(item => {
+  items.filter(i => i.folder).forEach(item => {
     const wrapper = document.createElement('div');
+
+    // Ligne principale du noeud
     const el = document.createElement('div');
     el.className = `tree-item depth-${depth}`;
-    el.dataset.id = item.id; el.dataset.name = item.name;
-    el.innerHTML = `<svg class="tree-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.4"><polyline points="9 18 15 12 9 6"/></svg>${folderIconSmall()}<span style="overflow:hidden;text-overflow:ellipsis">${item.name}</span>`;
+    el.dataset.id = item.id;
+    el.dataset.name = item.name;
+
+    // Flèche déplier/replier (zone cliquable séparée)
+    const toggleBtn = document.createElement('span');
+    toggleBtn.className = 'tree-toggle';
+    toggleBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.4;width:14px;height:14px;display:block"><polyline points="9 18 15 12 9 6"/></svg>`;
+
+    // Icône dossier + nom (zone cliquable pour naviguer)
+    const label = document.createElement('span');
+    label.className = 'tree-label';
+    label.style.cssText = 'display:flex;align-items:center;gap:5px;flex:1;overflow:hidden;min-width:0;cursor:pointer';
+    label.innerHTML = `${folderIconSmall()}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.name}</span>`;
+
+    el.appendChild(toggleBtn);
+    el.appendChild(label);
+
     const childContainer = document.createElement('div');
     childContainer.className = 'tree-children';
-    // Drag & drop depuis la zone principale vers l'arborescence
+
+    // ── Charger les enfants (réutilisable) ──────────────────────────────
+    async function loadChildren() {
+      if (childContainer.dataset.loaded) return;
+      childContainer.dataset.loaded = '1';
+      try {
+        const d = await graphCall(`/drives/${currentDriveId}/items/${item.id}/children?$filter=folder ne null&$select=id,name,folder`);
+        if (d.value && d.value.length) {
+          buildTreeNodes(d.value, childContainer, depth + 1);
+          toggleBtn.querySelector('svg').style.opacity = '1';
+        }
+      } catch(e) { console.warn('tree load:', e); }
+    }
+
+    // ── FLÈCHE : déplier / replier ──────────────────────────────────────
+    toggleBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      await loadChildren();
+      const open = childContainer.classList.toggle('open');
+      toggleBtn.classList.toggle('open', open);
+    });
+
+    // ── LABEL : naviguer dans le dossier ───────────────────────────────
+    label.addEventListener('click', async e => {
+      e.stopPropagation();
+      await navigateTo(buildPathTo(item));
+      // Ouvrir sans refermer
+      await loadChildren();
+      childContainer.classList.add('open');
+      toggleBtn.classList.add('open');
+    });
+
+    // ── DRAG & DROP vers ce dossier ─────────────────────────────────────
     let hoverExpandTimer = null;
     el.addEventListener('dragover', e => {
       if (!dragSource || dragSource.id === item.id) return;
       e.preventDefault(); e.stopPropagation();
       el.style.background = 'rgba(47,111,212,0.25)';
       el.style.borderRadius = '4px';
-      // Auto-déplier après 600ms de survol
       if (!hoverExpandTimer) {
         hoverExpandTimer = setTimeout(async () => {
-          const wrapper = el.parentElement;
-          const childContainer = wrapper?.querySelector('.tree-children');
-          const toggle = el.querySelector('.tree-toggle');
-          if (childContainer && !childContainer.classList.contains('open')) {
-            if (!childContainer.dataset.loaded) {
-              childContainer.dataset.loaded = '1';
-              try {
-                const d = await graphCall(`/drives/${currentDriveId}/items/${item.id}/children?$filter=folder ne null&$select=id,name,folder`);
-                if (d.value && d.value.length) {
-                  const depth = parseInt(el.className.match(/depth-(\d)/)?.[1] || 0);
-                  buildTreeNodes(d.value, childContainer, depth + 1);
-                  if (toggle) toggle.style.opacity = '1';
-                }
-              } catch {}
-            }
-            childContainer.classList.add('open');
-            if (toggle) toggle.classList.add('open');
-          }
+          await loadChildren();
+          childContainer.classList.add('open');
+          toggleBtn.classList.add('open');
         }, 600);
       }
     });
@@ -596,27 +627,9 @@ function buildTreeNodes(items, container, depth) {
       showMoveModal();
     });
 
-    // Simple clic = naviguer + déplier
-    el.addEventListener('click', async e => {
-      e.stopPropagation();
-      // Naviguer
-      await navigateTo(buildPathTo(item));
-      // Déplier/charger enfants
-      if (!childContainer.dataset.loaded) {
-        childContainer.dataset.loaded = '1';
-        try {
-          const d = await graphCall(`/drives/${currentDriveId}/items/${item.id}/children?$filter=folder ne null&$select=id,name,folder`);
-          if (d.value&&d.value.length) {
-            buildTreeNodes(d.value, childContainer, depth+1);
-            el.querySelector('.tree-toggle').style.opacity='1';
-          }
-        } catch{}
-      }
-      // Toujours ouvrir, jamais refermer au clic de navigation
-      childContainer.classList.add('open');
-      el.querySelector('.tree-toggle').classList.add('open');
-    });
-    wrapper.appendChild(el); wrapper.appendChild(childContainer); container.appendChild(wrapper);
+    wrapper.appendChild(el);
+    wrapper.appendChild(childContainer);
+    container.appendChild(wrapper);
   });
 }
 
