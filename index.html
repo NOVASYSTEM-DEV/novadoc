@@ -460,6 +460,7 @@ async function initMsal() {
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let currentDriveId = null;
 let currentPath = [];
+let currentFolderViewOnly = false;
 let currentView = 'grid';
 let isContributor = false;
 let ctxTarget = null;
@@ -598,6 +599,23 @@ async function loadCurrentFolder(filter='') {
     const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length-1].id;
     const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
+
+    // Vérifier les permissions du dossier courant pour currentFolderViewOnly
+    if (!currentUserIsOwner && folderId !== 'root') {
+      try {
+        const curPerms = await graphCall(`/drives/${currentDriveId}/items/${folderId}/permissions`);
+        const myPerm = (curPerms.value||[]).find(p => {
+          const u = (p.grantedTo&&p.grantedTo.user)||(p.grantedToV2&&p.grantedToV2.user)||{};
+          return (u.email||'').toLowerCase() === currentUserEmail || (u.displayName||'').toLowerCase() === currentUserName;
+        });
+        const myRoles = (myPerm && myPerm.roles) ? myPerm.roles.map(r=>r.toLowerCase()) : [];
+        const canWrite = myRoles.some(r => ['write','owner','sp.full control','sp.contribute','sp.modification','sp.collaboration'].includes(r));
+        const canRead  = canWrite || myRoles.some(r => ['read','sp.lecture','sp.read'].includes(r));
+        currentFolderViewOnly = !canWrite && !canRead;
+      } catch { currentFolderViewOnly = false; }
+    } else {
+      currentFolderViewOnly = false;
+    }
     // Vérifier les permissions d'écriture sur les dossiers en parallèle
     const folders = items.filter(i => i.folder);
     await Promise.all(folders.map(async folder => {
@@ -854,9 +872,7 @@ function attachItemEvents(content, items) {
       clearSelection();
       if (type==='folder') navigateTo([...currentPath, {id, name}]);
       else {
-        // Vérifier si le dossier courant est en affichage seul
-        const parentFolder = currentPath.length > 0 ? currentPath[currentPath.length-1] : null;
-        if (parentFolder && parentFolder._viewOnly) {
+        if (currentFolderViewOnly) {
           showError('Accès refusé — vous avez uniquement le droit de voir la liste des fichiers.');
           return;
         }
