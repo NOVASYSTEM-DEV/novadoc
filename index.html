@@ -1178,8 +1178,9 @@ async function loadPermissions() {
           html += '<div class="perm-member-row" style="padding:6px 0">';
           html += '<div class="perm-avatar" style="width:28px;height:28px;font-size:10px">'+initials+'</div>';
           html += '<div class="perm-member-info"><div class="perm-member-name">'+name+'</div><div class="perm-member-email">'+email+'</div></div>';
-          const safeName = (u.Title||u.LoginName||'').replace(/["']/g,''); const safeLabel = (group.label||'').replace(/["']/g,'');
-          html += '<button class="perm-remove-btn" onclick="novadocRemoveFromGroup('+group.id+','+u.Id+',\"'+safeName+'\",\"'+safeLabel+'\")" title="Retirer du groupe">✕</button>';
+          const safeName = (u.Title||u.LoginName||'').replace(/[&<>"']/g,'');
+          const safeLabel = (group.label||'').replace(/[&<>"']/g,'');
+          html += '<button class="perm-remove-btn" onclick="novadocRemoveFromGroup('+group.id+','+u.Id+',this)" data-name="'+safeName+'" data-label="'+safeLabel+'" title="Retirer du groupe">✕</button>';
           html += '</div>';
         });
       }
@@ -1199,7 +1200,9 @@ function novadocSetGroup(groupId) {
   document.getElementById('perm-add-email').focus();
 }
 
-async function novadocRemoveFromGroup(groupId, userId, userName, groupLabel) {
+async function novadocRemoveFromGroup(groupId, userId, btn) {
+  const userName = btn.dataset.name || 'cet utilisateur';
+  const groupLabel = btn.dataset.label || '';
   if (!confirm('Retirer "'+userName+'" du groupe "'+groupLabel+'" ?')) return;
   try {
     await spRestPost(SP_SITE_URL+'/_api/web/sitegroups/getbyid('+groupId+')/users/removebyid('+userId+')', null);
