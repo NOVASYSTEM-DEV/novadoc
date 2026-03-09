@@ -1245,15 +1245,17 @@ async function addPermission() {
         const itemData = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'?$select=id,sharepointIds');
         const listItemId = itemData.sharepointIds && itemData.sharepointIds.listItemId;
         if (listItemId) {
-          const itemBase = SP_SITE_URL+"/_api/web/lists/getbytitle('Documents')/items("+listItemId+")";
+          const listId = itemData.sharepointIds.listId;
+          const itemBase = SP_SITE_URL+"/_api/web/lists/getbyid('"+listId+"')/items("+listItemId+")";
           await fetch(itemBase+'/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)', { method:'POST', headers:h });
-          const roleNameMap = { 26:'Full Control', 27:'Edit', 28:'Contribute', 29:'Read', 30:'View Only' };
+          const roleNameMap = { 26:'Contrôle total', 27:'Modification', 28:'Collaboration', 29:'Lecture', 30:'Affichage seul' };
           const roleName = roleNameMap[groupId];
           const rdRes = await fetch(SP_SITE_URL+'/_api/web/roledefinitions', { headers:{ Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' }});
           const rdData = await rdRes.json();
           const roleDef = rdData.d.results.find(r => r.Name === roleName);
           if (roleDef) {
-            await fetch(itemBase+'/roleassignments/addroleassignment(principalid='+groupId+',roledefid='+roleDef.Id+')', { method:'POST', headers:h });
+            const listId = itemData.sharepointIds.listId;
+            await fetch(SP_SITE_URL+'/_api/web/lists/getbyid(\''+listId+'\')/items('+listItemId+')/roleassignments/addroleassignment(principalid='+groupId+',roledefid='+roleDef.Id+')', { method:'POST', headers:h });
           }
         }
       } catch(eF) { console.warn('Droits dossier:', eF.message); }
