@@ -262,6 +262,15 @@
 </div>
 
 <!-- MODAL PERMISSIONS -->
+<div class="modal-overlay" id="info-modal" onclick="if(event.target===this)closeInfoModal()">
+  <div class="modal" style="width:380px;text-align:center">
+    <div style="font-size:36px;margin-bottom:12px" id="info-modal-icon">🔒</div>
+    <h3 style="margin:0 0 10px" id="info-modal-title">Accès refusé</h3>
+    <p style="color:var(--text-muted);margin:0 0 20px;line-height:1.5" id="info-modal-msg"></p>
+    <button class="btn-primary" onclick="closeInfoModal()">OK</button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="permissions-modal">
   <div class="modal" style="width:620px;max-width:95vw">
     <div class="modal-header">
@@ -873,7 +882,7 @@ function attachItemEvents(content, items) {
       if (type==='folder') navigateTo([...currentPath, {id, name}]);
       else {
         if (currentFolderViewOnly) {
-          showError('Accès refusé — vous avez uniquement le droit de voir la liste des fichiers.');
+          showInfoModal('🔒', 'Accès refusé', 'Vous avez uniquement le droit de voir la liste des fichiers dans ce dossier.');
           return;
         }
         openFileLocal(name, url, el.dataset.parentPath, id);
@@ -1067,6 +1076,16 @@ async function showPermissionsModal() {
   document.getElementById('permissions-modal').classList.add('open');
   switchPermTab('members');
   await loadPermissions();
+}
+
+function showInfoModal(icon, title, msg) {
+  document.getElementById('info-modal-icon').textContent = icon;
+  document.getElementById('info-modal-title').textContent = title;
+  document.getElementById('info-modal-msg').textContent = msg;
+  document.getElementById('info-modal').classList.add('open');
+}
+function closeInfoModal() {
+  document.getElementById('info-modal').classList.remove('open');
 }
 
 function closePermissionsModal() {
