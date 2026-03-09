@@ -673,6 +673,7 @@ async function loadCurrentFolder(filter='') {
     const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length-1].id;
     const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
+    console.log('[NovaDoc] items dans dossier:', folderId, items.map(i=>i.name));
 
     // Déterminer le niveau NOVADOC depuis userPermissions (déjà chargé au login)
     currentFolderViewOnly = false;
