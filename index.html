@@ -638,6 +638,10 @@ async function loadCurrentFolder(filter='') {
         } else if (userGroups.includes(30)) {
           currentFolderViewOnly = true;
           currentFolderReadOnly = false;
+        } else {
+          // Aucun groupe NOVADOC → accès refusé total
+          currentFolderViewOnly = true;
+          currentFolderReadOnly = false;
         }
       } catch { currentFolderViewOnly = false; currentFolderReadOnly = false; }
     }
