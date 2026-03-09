@@ -506,6 +506,8 @@ let currentUserEmail = '';
 let currentUserName = '';
 let currentUserIsOwner = false;
 let userPermissions = []; // [{folderId, level}] chargé au login
+let userPermFolderIds = new Set(); // IDs directs autorisés
+let userTransitIds = new Set(); // IDs parents à traverser (chargés depuis FolderPath)
 
 async function checkUserIsOwner() {
   if (!currentDriveId) return;
@@ -541,44 +543,58 @@ async function afterLogin(account) {
 }
 
 async function loadUserPermissions() {
-  if (currentUserIsOwner) { userPermissions = null; return; } // owner = accès total
+  if (currentUserIsOwner) { userPermissions = null; return; }
   try {
     const token = await getSpToken();
     const h = { Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' };
     const filter = encodeURIComponent(`UserEmail eq '${currentUserEmail}'`);
-    const r = await fetch(`${SP_SITE_URL}/_api/web/lists(guid'${NOVADOC_PERM_LIST}')/items?$filter=${filter}&$select=FolderId,Level&$top=500`, { headers:h });
+    const r = await fetch(`${SP_SITE_URL}/_api/web/lists(guid'${NOVADOC_PERM_LIST}')/items?$filter=${filter}&$select=FolderId,FolderPath,Level&$top=500`, { headers:h });
     if (!r.ok) { userPermissions = []; return; }
     const d = await r.json();
     userPermissions = (d.d && d.d.results) || [];
-  } catch { userPermissions = []; }
+    // Construire les sets d'accès
+    userPermFolderIds = new Set(userPermissions.map(p => p.FolderId));
+    // Pour chaque chemin autorisé, marquer tous les dossiers parents comme traversables
+    // FolderPath ex: "Documents/SIEGE/COMPTABILITE" → parents: "Documents", "Documents/SIEGE"
+    userTransitIds = new Set();
+    userPermissions.forEach(p => {
+      if (!p.FolderPath) return;
+      const parts = p.FolderPath.split('/');
+      // On stocke les noms intermédiaires — mais on a besoin des IDs
+      // Stocker le FolderPath pour comparaison par chemin
+      p._pathParts = parts;
+    });
+  } catch { userPermissions = []; userPermFolderIds = new Set(); userTransitIds = new Set(); }
 }
 
-function userCanAccessFolder(folderId) {
+function userCanAccessFolder(folderId, folderName) {
   if (currentUserIsOwner || userPermissions === null) return true;
   if (!userPermissions.length) return false;
-  const allowedIds = new Set(userPermissions.map(p => p.FolderId));
   // Accès direct sur ce dossier
-  if (allowedIds.has(folderId)) return true;
-  // Accès via un dossier parent (héritage descendant)
+  if (userPermFolderIds.has(folderId)) return true;
+  // Accès via un dossier parent déjà dans currentPath
   for (const seg of currentPath) {
-    if (allowedIds.has(seg.id)) return true;
+    if (userPermFolderIds.has(seg.id)) return true;
   }
-  // Accès de transit : l'utilisateur a des droits sur un enfant de ce dossier
-  // → on autorise la traversée pour qu'il puisse y accéder
-  const folderIdStr = String(folderId);
+  // Transit : vérifier si ce dossier apparaît dans le chemin d'une permission
+  // En construisant le chemin courant + ce dossier
+  const currentNames = currentPath.map(p => p.name);
+  const pathToCheck = folderName ? [...currentNames, folderName] : currentNames;
   for (const p of userPermissions) {
-    if (String(p.FolderId).startsWith(folderIdStr)) return true;
+    if (!p._pathParts) continue;
+    // Si le chemin de la permission commence par pathToCheck → transit autorisé
+    const permParts = p._pathParts.slice(1); // Ignorer "Documents" racine
+    const match = pathToCheck.every((name, i) => permParts[i] && permParts[i].toUpperCase() === name.toUpperCase());
+    if (match) return true;
   }
   return false;
 }
 
 function userHasDirectAccess(folderId) {
-  // Vérifie si l'accès est direct (pas juste transit)
   if (currentUserIsOwner || userPermissions === null) return true;
-  const allowedIds = new Set(userPermissions.map(p => p.FolderId));
-  if (allowedIds.has(folderId)) return true;
+  if (userPermFolderIds.has(folderId)) return true;
   for (const seg of currentPath) {
-    if (allowedIds.has(seg.id)) return true;
+    if (userPermFolderIds.has(seg.id)) return true;
   }
   return false;
 }
@@ -774,7 +790,7 @@ function buildTreeNodes(items, container, depth) {
     // ── LABEL : naviguer dans le dossier ───────────────────────────────
     label.addEventListener('click', async e => {
       e.stopPropagation();
-      if (!userCanAccessFolder(item.id)) {
+      if (!userCanAccessFolder(item.id, item.name)) {
         showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+item.name+'".');
         return;
       }
@@ -944,7 +960,7 @@ function attachItemEvents(content, items) {
       const { id, name, type, url } = el.dataset;
       clearSelection();
       if (type==='folder') {
-        if (!userCanAccessFolder(id)) {
+        if (!userCanAccessFolder(id, name)) {
           showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+name+'".');
           return;
         }
