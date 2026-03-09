@@ -768,6 +768,10 @@ function buildTreeNodes(items, container, depth) {
     // ── LABEL : naviguer dans le dossier ───────────────────────────────
     label.addEventListener('click', async e => {
       e.stopPropagation();
+      if (!userCanAccessFolder(item.id)) {
+        showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+item.name+'".');
+        return;
+      }
       await navigateTo(buildPathTo(item));
       // Ouvrir sans refermer
       await loadChildren();
