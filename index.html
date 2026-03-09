@@ -470,6 +470,7 @@ async function initMsal() {
 let currentDriveId = null;
 let currentPath = [];
 let currentFolderViewOnly = false;
+let currentFolderReadOnly = false;
 let currentView = 'grid';
 let isContributor = false;
 let ctxTarget = null;
@@ -627,8 +628,11 @@ async function loadCurrentFolder(filter='') {
             const low = parseInt(spData.d.EffectiveBasePermissions.Low);
             // 0x20 = UseRemoteAPIs — présent en Lecture, absent en Affichage seul
             currentFolderViewOnly = (low & 0x20) === 0;
+            // 0x2 = AddListItems — absent en Lecture et Affichage seul, présent en Collaboration+
+            const canEdit = (low & 0x2) !== 0;
+            currentFolderReadOnly = !currentFolderViewOnly && !canEdit;
           } else {
-            currentFolderViewOnly = false;
+            currentFolderViewOnly = false; currentFolderReadOnly = false;
           }
         } else {
           // Pas de fichier trouvé — tester sur le dossier lui-même
@@ -645,12 +649,12 @@ async function loadCurrentFolder(filter='') {
               const low = parseInt(spData.d.EffectiveBasePermissions.Low);
               // 0x20 = UseRemoteAPIs — présent en Lecture, absent en Affichage seul
               currentFolderViewOnly = (low & 0x20) === 0;
-            } else { currentFolderViewOnly = false; }
-          } else { currentFolderViewOnly = false; }
+            } else { currentFolderViewOnly = false; } currentFolderReadOnly = false;
+          } else { currentFolderViewOnly = false; } currentFolderReadOnly = false;
         }
-      } catch { currentFolderViewOnly = false; }
+      } catch { currentFolderViewOnly = false; } currentFolderReadOnly = false;
     } else {
-      currentFolderViewOnly = false;
+      currentFolderViewOnly = false; currentFolderReadOnly = false;
     }
     // Vérifier les permissions d'écriture sur les dossiers en parallèle
     const folders = items.filter(i => i.folder);
@@ -962,7 +966,18 @@ function attachItemEvents(content, items) {
 }
 
 // ─── OPEN FILE ────────────────────────────────────────────────────────────────
+function openFileReadOnly(url) {
+  // Ouvrir dans Office Online en lecture seule
+  const viewUrl = url.replace('action=default', 'action=view').replace('action=edit', 'action=view');
+  window.open(viewUrl, '_blank');
+}
+
 function openFileLocal(name, url, parentPath, itemId) {
+  // Si lecture seule (pas affichage seul) → Office Online en lecture
+  if (currentFolderReadOnly) {
+    openFileReadOnly(url);
+    return;
+  }
   const ext = name.split('.').pop().toLowerCase();
   const protocols = {
     doc:'ms-word', docx:'ms-word', docm:'ms-word',
