@@ -1419,18 +1419,24 @@ async function addPermission() {
         const listId = itemData.sharepointIds && itemData.sharepointIds.listId;
         if (listItemId && listId) {
           const itemBase = SP_SITE_URL+"/_api/web/lists(guid('"+listId+"'))/items("+listItemId+")";
-          await fetch(itemBase+'/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)', { method:'POST', headers:h });
+          const breakRes = await fetch(itemBase+'/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)', { method:'POST', headers:h });
+          console.log('[NovaDoc] breakroleinheritance:', breakRes.status);
           // Assigner le rôle SP correspondant au niveau
           const roleNameMap = { 26:'Contrôle total', 27:'Modification', 28:'Collaboration', 29:'Lecture', 30:'Affichage seul' };
           const roleName = roleNameMap[groupId];
+          console.log('[NovaDoc] userId:', userId, 'roleName:', roleName);
           const rdRes = await fetch(SP_SITE_URL+'/_api/web/roledefinitions', { headers:{ Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' }});
           const rdData = await rdRes.json();
+          const allRoles = rdData.d.results.map(r=>r.Name);
+          console.log('[NovaDoc] roles disponibles:', allRoles);
           const roleDef = rdData.d.results.find(r => r.Name === roleName);
+          console.log('[NovaDoc] roleDef trouvé:', roleDef ? roleDef.Id+'/'+roleDef.Name : 'NON TROUVÉ');
           if (roleDef) {
-            await fetch(SP_SITE_URL+"/_api/web/lists(guid('"+listId+"'))/items("+listItemId+")/roleassignments/addroleassignment(principalid="+userId+",roledefid="+roleDef.Id+")", { method:'POST', headers:h });
+            const assignRes = await fetch(SP_SITE_URL+"/_api/web/lists(guid('"+listId+"'))/items("+listItemId+")/roleassignments/addroleassignment(principalid="+userId+",roledefid="+roleDef.Id+")", { method:'POST', headers:h });
+            console.log('[NovaDoc] addroleassignment:', assignRes.status);
           }
         }
-      } catch(eF) { console.warn('Droits SP dossier:', eF.message); }
+      } catch(eF) { console.error('[NovaDoc] Erreur droits SP dossier:', eF.message, eF); }
     }
 
     document.getElementById('perm-add-email').value = '';
