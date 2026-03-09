@@ -609,8 +609,10 @@ async function loadCurrentFolder(filter='') {
           const name = (u.displayName||'').toLowerCase();
           return email === currentUserEmail || name === currentUserName;
         });
-        // write/owner = peut écrire, read = lecture seule
-        folder._canWrite = currentUserIsOwner || !!(myPerms && myPerms.roles && myPerms.roles.some(r => ['write','owner','sp.full control','sp.contribute'].includes(r.toLowerCase())));
+        const roles = (myPerms && myPerms.roles) ? myPerms.roles.map(r=>r.toLowerCase()) : [];
+        folder._canWrite = currentUserIsOwner || roles.some(r => ['write','owner','sp.full control','sp.contribute','sp.modification','sp.collaboration'].includes(r));
+        folder._canRead  = folder._canWrite || roles.some(r => ['read','sp.lecture','sp.read'].includes(r));
+        folder._viewOnly = !folder._canWrite && !folder._canRead;
       } catch {
         folder._canWrite = currentUserIsOwner; // si pas de permissions explicites, se base sur owner
       }
@@ -851,7 +853,15 @@ function attachItemEvents(content, items) {
       const { id, name, type, url } = el.dataset;
       clearSelection();
       if (type==='folder') navigateTo([...currentPath, {id, name}]);
-      else openFileLocal(name, url, el.dataset.parentPath, id);
+      else {
+        // Vérifier si le dossier courant est en affichage seul
+        const parentFolder = currentPath.length > 0 ? currentPath[currentPath.length-1] : null;
+        if (parentFolder && parentFolder._viewOnly) {
+          showError('Accès refusé — vous avez uniquement le droit de voir la liste des fichiers.');
+          return;
+        }
+        openFileLocal(name, url, el.dataset.parentPath, id);
+      }
     });
     // Right click
     el.addEventListener('contextmenu', e => {
