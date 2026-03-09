@@ -760,6 +760,10 @@ function buildTreeNodes(items, container, depth) {
     // ── FLÈCHE : déplier / replier ──────────────────────────────────────
     toggleBtn.addEventListener('click', async e => {
       e.stopPropagation();
+      if (!userCanAccessFolder(item.id)) {
+        showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+item.name+'".');
+        return;
+      }
       await loadChildren();
       const open = childContainer.classList.toggle('open');
       toggleBtn.classList.toggle('open', open);
