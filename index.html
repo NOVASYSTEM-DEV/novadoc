@@ -612,28 +612,40 @@ async function loadCurrentFolder(filter='') {
     // Vérifier les permissions du dossier courant via SP REST
     if (!currentUserIsOwner && folderId !== 'root') {
       try {
-        const folderData = await graphCall(`/drives/${currentDriveId}/items/${folderId}?$select=id,sharepointIds`);
-        const listItemId = folderData.sharepointIds && folderData.sharepointIds.listItemId;
-        const listId = folderData.sharepointIds && folderData.sharepointIds.listId;
-        if (listItemId && listId) {
+        // Chercher un fichier dans le dossier pour tester les permissions effectives
+        const children = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$select=id,name,file,sharepointIds&$top=10`);
+        const firstFile = (children.value||[]).find(i => i.file && i.sharepointIds);
+        if (firstFile) {
+          const listItemId = firstFile.sharepointIds.listItemId;
+          const listId = firstFile.sharepointIds.listId;
           const token = await getSpToken();
           const spRes = await fetch(`${SP_SITE_URL}/_api/web/lists/getbyid('${listId}')/items(${listItemId})/effectiveBasePermissions`, {
             headers: { Authorization: 'Bearer '+token, Accept: 'application/json;odata=verbose' }
           });
           if (spRes.ok) {
             const spData = await spRes.json();
-            const perms = spData.d.EffectiveBasePermissions;
-            const high = parseInt(perms.High);
-            const low  = parseInt(perms.Low);
-            // 0x40 = View Only (affichage seul sans ouverture)
-            // 0x1  = ViewListItems (voir la liste)
-            // Si View Only activé = affichage seul, sinon peut ouvrir
-            currentFolderViewOnly = (low & 0x40) !== 0;
+            const low = parseInt(spData.d.EffectiveBasePermissions.Low);
+            // 0x4 = OpenItems (ouvrir les fichiers)
+            currentFolderViewOnly = (low & 0x4) === 0;
           } else {
             currentFolderViewOnly = false;
           }
         } else {
-          currentFolderViewOnly = false;
+          // Pas de fichier trouvé — tester sur le dossier lui-même
+          const folderData = await graphCall(`/drives/${currentDriveId}/items/${folderId}?$select=id,sharepointIds`);
+          const listItemId = folderData.sharepointIds && folderData.sharepointIds.listItemId;
+          const listId = folderData.sharepointIds && folderData.sharepointIds.listId;
+          if (listItemId && listId) {
+            const token = await getSpToken();
+            const spRes = await fetch(`${SP_SITE_URL}/_api/web/lists/getbyid('${listId}')/items(${listItemId})/effectiveBasePermissions`, {
+              headers: { Authorization: 'Bearer '+token, Accept: 'application/json;odata=verbose' }
+            });
+            if (spRes.ok) {
+              const spData = await spRes.json();
+              const low = parseInt(spData.d.EffectiveBasePermissions.Low);
+              currentFolderViewOnly = (low & 0x4) === 0;
+            } else { currentFolderViewOnly = false; }
+          } else { currentFolderViewOnly = false; }
         }
       } catch { currentFolderViewOnly = false; }
     } else {
