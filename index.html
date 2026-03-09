@@ -1226,12 +1226,32 @@ async function addPermission() {
     const userId = euData.d ? euData.d.Id : null;
     if (!userId) throw new Error('ID utilisateur non trouvé');
 
-    // Ajouter au groupe
+    // Ajouter au groupe SP
     const addRes = await fetch(SP_SITE_URL+'/_api/web/sitegroups/getbyid('+groupId+')/users', {
       method:'POST', headers:h,
       body: JSON.stringify({ '__metadata': { type: 'SP.User' }, LoginName: 'i:0#.f|membership|'+email })
     });
     if (!addRes.ok) { const t = await addRes.text(); throw new Error('Erreur ajout groupe: '+t.substring(0,200)); }
+
+    // Si un dossier est ciblé → casser héritage et assigner le groupe sur le dossier
+    if (ctxTarget && ctxTarget.id) {
+      try {
+        const itemData = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'?$select=id,sharepointIds');
+        const listItemId = itemData.sharepointIds && itemData.sharepointIds.listItemId;
+        if (listItemId) {
+          const itemBase = SP_SITE_URL+"/_api/web/lists/getbytitle('Documents')/items("+listItemId+")";
+          await fetch(itemBase+'/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)', { method:'POST', headers:h });
+          const roleNameMap = { 26:'Full Control', 27:'Edit', 28:'Contribute', 29:'Read', 30:'View Only' };
+          const roleName = roleNameMap[groupId];
+          const rdRes = await fetch(SP_SITE_URL+'/_api/web/roledefinitions', { headers:{ Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' }});
+          const rdData = await rdRes.json();
+          const roleDef = rdData.d.results.find(r => r.Name === roleName);
+          if (roleDef) {
+            await fetch(itemBase+'/roleassignments/addroleassignment(principalid='+groupId+',roledefid='+roleDef.Id+')', { method:'POST', headers:h });
+          }
+        }
+      } catch(eF) { console.warn('Droits dossier:', eF.message); }
+    }
 
     document.getElementById('perm-add-email').value = '';
     switchPermTab('members');
