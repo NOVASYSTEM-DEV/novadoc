@@ -471,6 +471,7 @@ let currentDriveId = null;
 let currentPath = [];
 let currentFolderViewOnly = false;
 let currentFolderReadOnly = false;
+let currentFolderCanDelete = false;
 let currentView = 'grid';
 let isContributor = false;
 let ctxTarget = null;
@@ -629,19 +630,26 @@ async function loadCurrentFolder(filter='') {
         }));
         const userGroups = groupChecks.filter(id => id !== null);
         // Le groupe le plus permissif détermine le niveau
-        if (userGroups.includes(26) || userGroups.includes(27) || userGroups.includes(28)) {
+        if (userGroups.includes(26) || userGroups.includes(27)) {
           currentFolderViewOnly = false;
           currentFolderReadOnly = false;
+          currentFolderCanDelete = true;
+        } else if (userGroups.includes(28)) {
+          currentFolderViewOnly = false;
+          currentFolderReadOnly = false;
+          currentFolderCanDelete = false;
         } else if (userGroups.includes(29)) {
           currentFolderViewOnly = false;
           currentFolderReadOnly = true;
+          currentFolderCanDelete = false;
         } else if (userGroups.includes(30)) {
           currentFolderViewOnly = true;
           currentFolderReadOnly = false;
+          currentFolderCanDelete = false;
         } else {
-          // Aucun groupe NOVADOC → accès refusé total
           currentFolderViewOnly = true;
           currentFolderReadOnly = false;
+          currentFolderCanDelete = false;
         }
       } catch { currentFolderViewOnly = false; currentFolderReadOnly = false; }
     }
@@ -1088,7 +1096,7 @@ async function ctxDelete() {
   if (!ctxTarget) return;
   const createdByLower = (ctxTarget.createdBy||'').toLowerCase();
   const isCreator = createdByLower && (createdByLower === currentUserEmail || createdByLower === currentUserName);
-  if (!isCreator && !currentUserIsOwner) {
+  if (!isCreator && !currentUserIsOwner && !currentFolderCanDelete) {
     alert('Vous ne pouvez pas supprimer cet élément car vous n\'en êtes pas le créateur.');
     return;
   }
@@ -1562,7 +1570,7 @@ async function pasteItems() {
 
 async function selDelete() {
   if (!selectedItems.length) return;
-  if (!currentUserIsOwner) {
+  if (!currentUserIsOwner && !currentFolderCanDelete) {
     const notOwned = selectedItems.filter(s => {
       const el = document.querySelector('[data-id="'+s.id+'"]');
       const createdBy = (el && el.dataset.createdBy || '').toLowerCase();
