@@ -625,8 +625,8 @@ async function loadCurrentFolder(filter='') {
           if (spRes.ok) {
             const spData = await spRes.json();
             const low = parseInt(spData.d.EffectiveBasePermissions.Low);
-            // 0x4 = OpenItems (ouvrir les fichiers)
-            currentFolderViewOnly = (low & 0x4) === 0;
+            // 0x20 = UseRemoteAPIs — présent en Lecture, absent en Affichage seul
+            currentFolderViewOnly = (low & 0x20) === 0;
           } else {
             currentFolderViewOnly = false;
           }
@@ -643,7 +643,8 @@ async function loadCurrentFolder(filter='') {
             if (spRes.ok) {
               const spData = await spRes.json();
               const low = parseInt(spData.d.EffectiveBasePermissions.Low);
-              currentFolderViewOnly = (low & 0x4) === 0;
+              // 0x20 = UseRemoteAPIs — présent en Lecture, absent en Affichage seul
+              currentFolderViewOnly = (low & 0x20) === 0;
             } else { currentFolderViewOnly = false; }
           } else { currentFolderViewOnly = false; }
         }
