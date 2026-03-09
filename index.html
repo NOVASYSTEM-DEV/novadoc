@@ -609,18 +609,31 @@ async function loadCurrentFolder(filter='') {
     const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
 
-    // Vérifier les permissions du dossier courant pour currentFolderViewOnly
+    // Vérifier les permissions du dossier courant via SP REST
     if (!currentUserIsOwner && folderId !== 'root') {
       try {
-        const curPerms = await graphCall(`/drives/${currentDriveId}/items/${folderId}/permissions`);
-        const myPerm = (curPerms.value||[]).find(p => {
-          const u = (p.grantedTo&&p.grantedTo.user)||(p.grantedToV2&&p.grantedToV2.user)||{};
-          return (u.email||'').toLowerCase() === currentUserEmail || (u.displayName||'').toLowerCase() === currentUserName;
-        });
-        const myRoles = (myPerm && myPerm.roles) ? myPerm.roles.map(r=>r.toLowerCase()) : [];
-        const canWrite = myRoles.some(r => ['write','owner','sp.full control','sp.contribute','sp.modification','sp.collaboration'].includes(r));
-        const canRead  = canWrite || myRoles.some(r => ['read','sp.lecture','sp.read'].includes(r));
-        currentFolderViewOnly = !canWrite && !canRead;
+        const folderData = await graphCall(`/drives/${currentDriveId}/items/${folderId}?$select=id,sharepointIds`);
+        const listItemId = folderData.sharepointIds && folderData.sharepointIds.listItemId;
+        const listId = folderData.sharepointIds && folderData.sharepointIds.listId;
+        if (listItemId && listId) {
+          const token = await getSpToken();
+          const spRes = await fetch(`${SP_SITE_URL}/_api/web/lists/getbyid('${listId}')/items(${listItemId})/effectiveBasePermissions`, {
+            headers: { Authorization: 'Bearer '+token, Accept: 'application/json;odata=verbose' }
+          });
+          if (spRes.ok) {
+            const spData = await spRes.json();
+            const high = spData.d.High;
+            const low  = spData.d.Low;
+            // Bit 0x4 de Low = Open Items (lire les fichiers)
+            // Bit 0x40 de Low = View Only
+            const canOpenItems = (low & 0x4) !== 0;
+            currentFolderViewOnly = !canOpenItems;
+          } else {
+            currentFolderViewOnly = false;
+          }
+        } else {
+          currentFolderViewOnly = false;
+        }
       } catch { currentFolderViewOnly = false; }
     } else {
       currentFolderViewOnly = false;
