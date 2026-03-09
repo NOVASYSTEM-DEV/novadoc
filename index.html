@@ -640,44 +640,29 @@ async function loadCurrentFolder(filter='') {
     const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
 
-    // Vérifier le niveau NOVADOC de l'utilisateur sur ce dossier via la liste NovaDocPermissions
+    // Déterminer le niveau NOVADOC depuis userPermissions (déjà chargé au login)
     currentFolderViewOnly = false;
     currentFolderReadOnly = false;
     currentFolderCanDelete = false;
     if (!currentUserIsOwner) {
-      try {
-        const token = await getSpToken();
-        // Chercher une entrée pour cet utilisateur ET ce dossier (ou dossier parent)
-        // On remonte l'arbre : dossier courant d'abord, puis parents
-        const pathsToCheck = [folderId];
-        currentPath.forEach(p => { if (!pathsToCheck.includes(p.id)) pathsToCheck.unshift(p.id); });
-        
-        let level = null;
-        for (const checkId of pathsToCheck.reverse()) {
-          const filter = encodeURIComponent(`FolderId eq '${checkId}' and UserEmail eq '${currentUserEmail}'`);
-          const r = await fetch(`${SP_SITE_URL}/_api/web/lists(guid'${NOVADOC_PERM_LIST}')/items?$filter=${filter}&$select=Level&$top=1`, {
-            headers: { Authorization: 'Bearer '+token, Accept: 'application/json;odata=verbose' }
-          });
-          if (r.ok) {
-            const d = await r.json();
-            const items = (d.d && d.d.results) || [];
-            if (items.length > 0) { level = items[0].Level; break; }
-          }
-        }
-
-        if (level === 26 || level === 27) {
-          currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = true;
-        } else if (level === 28) {
-          currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = false;
-        } else if (level === 29) {
-          currentFolderViewOnly = false; currentFolderReadOnly = true; currentFolderCanDelete = false;
-        } else if (level === 30) {
-          currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
-        } else {
-          // Aucune entrée trouvée → accès refusé
-          currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
-        }
-      } catch { currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = false; }
+      // Chercher le niveau le plus précis : dossier courant d'abord, puis parents
+      const pathsToCheck = [folderId, ...currentPath.map(p => p.id)];
+      let level = null;
+      for (const checkId of pathsToCheck) {
+        const entry = (userPermissions || []).find(p => p.FolderId === checkId);
+        if (entry) { level = entry.Level; break; }
+      }
+      if (level === 26 || level === 27) {
+        currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = true;
+      } else if (level === 28) {
+        currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = false;
+      } else if (level === 29) {
+        currentFolderViewOnly = false; currentFolderReadOnly = true; currentFolderCanDelete = false;
+      } else if (level === 30) {
+        currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
+      } else {
+        currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
+      }
     }
     // Vérifier les permissions d'écriture sur les dossiers en parallèle
     const folders = items.filter(i => i.folder);
