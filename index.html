@@ -686,6 +686,7 @@ async function loadCurrentFolder(filter='') {
         const entry = (userPermissions || []).find(p => p.FolderId === checkId);
         if (entry) { level = entry.Level; break; }
       }
+      console.log('[NovaDoc] niveau détecté pour dossier:', folderId, 'level=', level);
       if (level === 26 || level === 27) {
         currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = true;
       } else if (level === 28) {
