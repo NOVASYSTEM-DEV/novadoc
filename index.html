@@ -449,7 +449,7 @@ const msalConfig = {
   auth: { clientId: CLIENT_ID, authority: `https://login.microsoftonline.com/${TENANT_ID}`, redirectUri: window.location.origin },
   cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
 };
-const scopes = ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'User.Read', 'Mail.Send', 'https://novasystemfr.sharepoint.com/AllSites.Manage'];
+const scopes = ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'User.Read', 'Mail.Send', 'https://novasystemfr.sharepoint.com/AllSites.FullControl'];
 
 let msalInstance;
 async function initMsal() {
@@ -1107,13 +1107,13 @@ async function getSpToken() {
   if (!accounts.length) return null;
   try {
     const r = await msalInstance.acquireTokenSilent({
-      scopes: ['https://novasystemfr.sharepoint.com/AllSites.Manage'],
+      scopes: ['https://novasystemfr.sharepoint.com/AllSites.FullControl'],
       account: accounts[0]
     });
     return r.accessToken;
   } catch {
     const r = await msalInstance.acquireTokenPopup({
-      scopes: ['https://novasystemfr.sharepoint.com/AllSites.Manage'],
+      scopes: ['https://novasystemfr.sharepoint.com/AllSites.FullControl'],
       account: accounts[0]
     });
     return r.accessToken;
