@@ -505,6 +505,7 @@ async function getToken() {
 let currentUserEmail = '';
 let currentUserName = '';
 let currentUserIsOwner = false;
+let spDocumentsListId = null; // ID SP de la bibliothèque Documents
 let userPermissions = []; // [{folderId, level}] chargé au login
 let userPermFolderIds = new Set(); // IDs directs autorisés
 let userTransitIds = new Set(); // IDs parents à traverser (chargés depuis FolderPath)
@@ -624,6 +625,16 @@ async function loadSiteAndDrive() {
     const site = await graphCall('/sites/novasystemfr.sharepoint.com:/sites/TESTSHAREPOINTEXCEL');
     const drive = await graphCall(`/sites/${site.id}/drive`);
     currentDriveId = drive.id;
+    // Récupérer l'ID SP de la bibliothèque Documents
+    try {
+      const token = await getSpToken();
+      const r = await fetch(SP_SITE_URL+'/_api/web/lists/getbytitle('Documents')?$select=Id', {
+        headers:{ Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' }
+      });
+      const d = await r.json();
+      spDocumentsListId = d.d && d.d.Id;
+      console.log('[NovaDoc] spDocumentsListId:', spDocumentsListId);
+    } catch(e) { console.warn('Impossible de charger listId Documents:', e.message); }
     await navigateTo([]);
     await loadTree();
   } catch(e) { showError(e.message); }
@@ -1416,7 +1427,7 @@ async function addPermission() {
       try {
         const itemData = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'?$select=id,sharepointIds');
         const listItemId = itemData.sharepointIds && itemData.sharepointIds.listItemId;
-        const listId = itemData.sharepointIds && itemData.sharepointIds.listId;
+        const listId = spDocumentsListId || (itemData.sharepointIds && itemData.sharepointIds.listId);
         if (listItemId && listId) {
           const itemBase = SP_SITE_URL+"/_api/web/lists(guid('"+listId+"'))/items("+listItemId+")";
           const breakRes = await fetch(itemBase+'/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)', { method:'POST', headers:h });
