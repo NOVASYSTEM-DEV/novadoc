@@ -622,12 +622,13 @@ async function loadCurrentFolder(filter='') {
           });
           if (spRes.ok) {
             const spData = await spRes.json();
-            const high = spData.d.High;
-            const low  = spData.d.Low;
-            // Bit 0x4 de Low = Open Items (lire les fichiers)
-            // Bit 0x40 de Low = View Only
-            const canOpenItems = (low & 0x4) !== 0;
-            currentFolderViewOnly = !canOpenItems;
+            const perms = spData.d.EffectiveBasePermissions;
+            const high = parseInt(perms.High);
+            const low  = parseInt(perms.Low);
+            // 0x40 = View Only (affichage seul sans ouverture)
+            // 0x1  = ViewListItems (voir la liste)
+            // Si View Only activé = affichage seul, sinon peut ouvrir
+            currentFolderViewOnly = (low & 0x40) !== 0;
           } else {
             currentFolderViewOnly = false;
           }
