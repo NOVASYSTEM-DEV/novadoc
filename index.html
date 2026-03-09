@@ -577,14 +577,14 @@ function userCanAccessFolder(folderId, folderName) {
     if (userPermFolderIds.has(seg.id)) return true;
   }
   // Transit : vérifier si ce dossier apparaît dans le chemin d'une permission
-  // En construisant le chemin courant + ce dossier
   const currentNames = currentPath.map(p => p.name);
   const pathToCheck = folderName ? [...currentNames, folderName] : currentNames;
+  console.log('[NovaDoc] userCanAccessFolder check transit:', pathToCheck, userPermissions.map(p=>p.FolderPath));
   for (const p of userPermissions) {
     if (!p._pathParts) continue;
-    // Si le chemin de la permission commence par pathToCheck → transit autorisé
     const permParts = p._pathParts.slice(1); // Ignorer "Documents" racine
     const match = pathToCheck.every((name, i) => permParts[i] && permParts[i].toUpperCase() === name.toUpperCase());
+    console.log('[NovaDoc] comparing', pathToCheck, 'vs', permParts, '→', match);
     if (match) return true;
   }
   return false;
