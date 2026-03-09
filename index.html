@@ -534,10 +534,10 @@ async function afterLogin(account) {
   document.getElementById('login-screen').style.display = 'none';
   isContributor = true;
   document.querySelectorAll('.contributor-only').forEach(el => el.style.display = '');
+  // Charger les permissions AVANT de naviguer, owner après le drive
+  await loadUserPermissions();
   await loadSiteAndDrive();
-  // Vérifier owner APRÈS que le drive soit chargé
-  checkUserIsOwner();
-  loadUserPermissions();
+  await checkUserIsOwner();
 }
 
 async function loadUserPermissions() {
@@ -556,10 +556,27 @@ async function loadUserPermissions() {
 function userCanAccessFolder(folderId) {
   if (currentUserIsOwner || userPermissions === null) return true;
   if (!userPermissions.length) return false;
-  // Vérifier si le dossier lui-même ou un parent est dans les permissions
+  const allowedIds = new Set(userPermissions.map(p => p.FolderId));
+  // Accès direct sur ce dossier
+  if (allowedIds.has(folderId)) return true;
+  // Accès via un dossier parent (héritage descendant)
+  for (const seg of currentPath) {
+    if (allowedIds.has(seg.id)) return true;
+  }
+  // Accès de transit : l'utilisateur a des droits sur un enfant de ce dossier
+  // → on autorise la traversée pour qu'il puisse y accéder
+  const folderIdStr = String(folderId);
+  for (const p of userPermissions) {
+    if (String(p.FolderId).startsWith(folderIdStr)) return true;
+  }
+  return false;
+}
+
+function userHasDirectAccess(folderId) {
+  // Vérifie si l'accès est direct (pas juste transit)
+  if (currentUserIsOwner || userPermissions === null) return true;
   const allowedIds = new Set(userPermissions.map(p => p.FolderId));
   if (allowedIds.has(folderId)) return true;
-  // Vérifier les parents dans currentPath
   for (const seg of currentPath) {
     if (allowedIds.has(seg.id)) return true;
   }
