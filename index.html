@@ -610,51 +610,36 @@ async function loadCurrentFolder(filter='') {
     const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
 
-    // Vérifier les permissions du dossier courant via SP REST
-    if (!currentUserIsOwner && folderId !== 'root') {
+    // Vérifier le niveau NOVADOC de l'utilisateur sur ce dossier
+    currentFolderViewOnly = false;
+    currentFolderReadOnly = false;
+    if (!currentUserIsOwner) {
       try {
-        // Chercher un fichier dans le dossier pour tester les permissions effectives
-        const children = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$select=id,name,file,sharepointIds&$top=10`);
-        const firstFile = (children.value||[]).find(i => i.file && i.sharepointIds);
-        if (firstFile) {
-          const listItemId = firstFile.sharepointIds.listItemId;
-          const listId = firstFile.sharepointIds.listId;
-          const token = await getSpToken();
-          const spRes = await fetch(`${SP_SITE_URL}/_api/web/lists/getbyid('${listId}')/items(${listItemId})/effectiveBasePermissions`, {
+        const token = await getSpToken();
+        // Récupérer les groupes NOVADOC dont l'utilisateur est membre
+        const groupChecks = await Promise.all(SP_GROUPS.map(async g => {
+          const r = await fetch(`${SP_SITE_URL}/_api/web/sitegroups/getbyid(${g.id})/users`, {
             headers: { Authorization: 'Bearer '+token, Accept: 'application/json;odata=verbose' }
           });
-          if (spRes.ok) {
-            const spData = await spRes.json();
-            const low = parseInt(spData.d.EffectiveBasePermissions.Low);
-            // 0x20 = UseRemoteAPIs — présent en Lecture, absent en Affichage seul
-            currentFolderViewOnly = (low & 0x20) === 0;
-            // 0x2 = AddListItems — absent en Lecture et Affichage seul, présent en Collaboration+
-            const canEdit = (low & 0x2) !== 0;
-            currentFolderReadOnly = !currentFolderViewOnly && !canEdit;
-          } else {
-            currentFolderViewOnly = false; currentFolderReadOnly = false;
-          }
-        } else {
-          // Pas de fichier trouvé — tester sur le dossier lui-même
-          const folderData = await graphCall(`/drives/${currentDriveId}/items/${folderId}?$select=id,sharepointIds`);
-          const listItemId = folderData.sharepointIds && folderData.sharepointIds.listItemId;
-          const listId = folderData.sharepointIds && folderData.sharepointIds.listId;
-          if (listItemId && listId) {
-            const token = await getSpToken();
-            const spRes = await fetch(`${SP_SITE_URL}/_api/web/lists/getbyid('${listId}')/items(${listItemId})/effectiveBasePermissions`, {
-              headers: { Authorization: 'Bearer '+token, Accept: 'application/json;odata=verbose' }
-            });
-            if (spRes.ok) {
-              const spData = await spRes.json();
-              const low = parseInt(spData.d.EffectiveBasePermissions.Low);
-              // 0x20 = UseRemoteAPIs — présent en Lecture, absent en Affichage seul
-              currentFolderViewOnly = (low & 0x20) === 0;
-            } else { currentFolderViewOnly = false; } currentFolderReadOnly = false;
-          } else { currentFolderViewOnly = false; } currentFolderReadOnly = false;
+          if (!r.ok) return null;
+          const d = await r.json();
+          const members = (d.d && d.d.results) || [];
+          const isMember = members.some(u => (u.Email||'').toLowerCase() === currentUserEmail);
+          return isMember ? g.id : null;
+        }));
+        const userGroups = groupChecks.filter(id => id !== null);
+        // Le groupe le plus permissif détermine le niveau
+        if (userGroups.includes(26) || userGroups.includes(27) || userGroups.includes(28)) {
+          currentFolderViewOnly = false;
+          currentFolderReadOnly = false;
+        } else if (userGroups.includes(29)) {
+          currentFolderViewOnly = false;
+          currentFolderReadOnly = true;
+        } else if (userGroups.includes(30)) {
+          currentFolderViewOnly = true;
+          currentFolderReadOnly = false;
         }
-      } catch { currentFolderViewOnly = false; } currentFolderReadOnly = false;
-    } else {
-      currentFolderViewOnly = false; currentFolderReadOnly = false;
+      } catch { currentFolderViewOnly = false; currentFolderReadOnly = false; }
     }
     // Vérifier les permissions d'écriture sur les dossiers en parallèle
     const folders = items.filter(i => i.folder);
