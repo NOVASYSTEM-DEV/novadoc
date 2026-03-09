@@ -552,6 +552,7 @@ async function loadUserPermissions() {
     if (!r.ok) { userPermissions = []; return; }
     const d = await r.json();
     userPermissions = (d.d && d.d.results) || [];
+    console.log('[NovaDoc] userPermissions chargé:', userPermissions.length, userPermissions.map(p=>p.FolderPath+'='+p.Level));
     // Construire les sets d'accès
     userPermFolderIds = new Set(userPermissions.map(p => p.FolderId));
     // Pour chaque chemin autorisé, marquer tous les dossiers parents comme traversables
