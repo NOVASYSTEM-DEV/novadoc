@@ -505,6 +505,7 @@ async function getToken() {
 let currentUserEmail = '';
 let currentUserName = '';
 let currentUserIsOwner = false;
+let userPermissions = []; // [{folderId, level}] chargé au login
 
 async function checkUserIsOwner() {
   if (!currentDriveId) return;
@@ -536,6 +537,33 @@ async function afterLogin(account) {
   await loadSiteAndDrive();
   // Vérifier owner APRÈS que le drive soit chargé
   checkUserIsOwner();
+  loadUserPermissions();
+}
+
+async function loadUserPermissions() {
+  if (currentUserIsOwner) { userPermissions = null; return; } // owner = accès total
+  try {
+    const token = await getSpToken();
+    const h = { Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' };
+    const filter = encodeURIComponent(`UserEmail eq '${currentUserEmail}'`);
+    const r = await fetch(`${SP_SITE_URL}/_api/web/lists(guid'${NOVADOC_PERM_LIST}')/items?$filter=${filter}&$select=FolderId,Level&$top=500`, { headers:h });
+    if (!r.ok) { userPermissions = []; return; }
+    const d = await r.json();
+    userPermissions = (d.d && d.d.results) || [];
+  } catch { userPermissions = []; }
+}
+
+function userCanAccessFolder(folderId) {
+  if (currentUserIsOwner || userPermissions === null) return true;
+  if (!userPermissions.length) return false;
+  // Vérifier si le dossier lui-même ou un parent est dans les permissions
+  const allowedIds = new Set(userPermissions.map(p => p.FolderId));
+  if (allowedIds.has(folderId)) return true;
+  // Vérifier les parents dans currentPath
+  for (const seg of currentPath) {
+    if (allowedIds.has(seg.id)) return true;
+  }
+  return false;
 }
 
 function doLogout() {
@@ -905,7 +933,13 @@ function attachItemEvents(content, items) {
       if (e.target.dataset.check || e.target.closest('[data-check]')) return;
       const { id, name, type, url } = el.dataset;
       clearSelection();
-      if (type==='folder') navigateTo([...currentPath, {id, name}]);
+      if (type==='folder') {
+        if (!userCanAccessFolder(id)) {
+          showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+name+'".');
+          return;
+        }
+        navigateTo([...currentPath, {id, name}]);
+      }
       else {
         if (currentFolderViewOnly) {
           showInfoModal('🔒', 'Accès refusé', 'Vous avez uniquement le droit de voir la liste des fichiers dans ce dossier.');
