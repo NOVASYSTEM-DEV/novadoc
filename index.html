@@ -971,8 +971,9 @@ function openFileLocal(name, url, parentPath, itemId) {
 // ─── CONTEXT MENU ─────────────────────────────────────────────────────────────
 function showCtxMenu(e, type) {
   const menu = document.getElementById('ctx-menu');
-  document.getElementById('ctx-open-local').style.display = type==='file' ? '' : 'none';
-  document.getElementById('ctx-download').style.display = type==='file' ? '' : 'none';
+  const isFile = type === 'file';
+  document.getElementById('ctx-open-local').style.display = isFile && !currentFolderViewOnly ? '' : 'none';
+  document.getElementById('ctx-download').style.display = isFile && !currentFolderViewOnly ? '' : 'none';
   // Versions disponibles pour fichiers seulement
   const versionsEl = document.getElementById('ctx-versions');
   const sepDelEl = document.getElementById('ctx-sep-del');
@@ -996,7 +997,10 @@ document.addEventListener('keydown', e => {
   }
 });
 
-function ctxOpenLocal() { if(ctxTarget) openFileLocal(ctxTarget.name, ctxTarget.url, ctxTarget.parentPath, ctxTarget.id); }
+function ctxOpenLocal() {
+  if (currentFolderViewOnly) { showInfoModal('🔒', 'Accès refusé', 'Vous avez uniquement le droit de voir la liste des fichiers dans ce dossier.'); return; }
+  if(ctxTarget) openFileLocal(ctxTarget.name, ctxTarget.url, ctxTarget.parentPath, ctxTarget.id);
+}
 
 async function ctxDownload() {
   if (!ctxTarget||ctxTarget.type!=='file') return;
