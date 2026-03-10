@@ -746,17 +746,7 @@ async function loadCurrentFolder(filter='') {
           currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
         }
       }
-          const folderInfo = await graphCall(`/drives/${currentDriveId}/items/${folderId}?$select=createdBy`);
-          const creator = folderInfo.createdBy && folderInfo.createdBy.user && folderInfo.createdBy.user.email;
-          if (creator && creator.toLowerCase() === currentUserEmail.toLowerCase()) {
-            currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = true;
-          } else {
-            currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
-          }
-        } catch {
-          currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
-        }
-      }
+          
     }
     // Vérifier les permissions d'écriture sur les dossiers en parallèle
     const folders = items.filter(i => i.folder);
