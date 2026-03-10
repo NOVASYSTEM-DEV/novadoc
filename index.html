@@ -706,12 +706,9 @@ async function loadCurrentFolder(filter='') {
     currentFolderCanDelete = false;
     if (!currentUserIsOwner) {
       // Chercher le niveau le plus précis : dossier courant d'abord, puis parents
-      const pathsToCheck = [folderId, ...currentPath.map(p => p.id)];
       let level = null;
-      for (const checkId of pathsToCheck) {
-        const entry = (userPermissions || []).find(p => p.FolderId === checkId);
-        if (entry) { level = entry.Level; break; }
-      }
+      const entry = (userPermissions || []).find(p => p.FolderId === folderId);
+      if (entry) { level = entry.Level; }
       console.log('[NovaDoc] niveau détecté pour dossier:', folderId, 'level=', level);
       if (level === 26 || level === 27) {
         currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = true;
