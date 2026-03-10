@@ -1444,7 +1444,7 @@ async function addPermission() {
           const roleDef = rdData.d.results.find(r => r.Name === roleName);
           console.log('[NovaDoc] roleDef trouvé:', roleDef ? roleDef.Id+'/'+roleDef.Name : 'NON TROUVÉ');
           if (roleDef) {
-            const assignRes = await fetch(SP_SITE_URL+"/_api/web/lists(guid('"+listId+"'))/items("+listItemId+")/roleassignments/addroleassignment(principalid="+userId+",roledefid="+roleDef.Id+")", { method:'POST', headers:h });
+            const assignRes = await fetch(SP_SITE_URL+"/_api/web/GetFolderByServerRelativeUrl('"+folderRelUrl+"')/ListItemAllFields/roleassignments/addroleassignment(principalid="+userId+",roledefid="+roleDef.Id+")", { method:'POST', headers:h });
             console.log('[NovaDoc] addroleassignment:', assignRes.status);
           }
         }
