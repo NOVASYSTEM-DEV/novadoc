@@ -750,7 +750,7 @@ async function loadTree(forceReload=false) {
 }
 
 function buildTreeNodes(items, container, depth) {
-  items.filter(i => i.folder).forEach(item => {
+  items.filter(i => i.folder && (currentUserIsOwner || userCanAccessFolder(i.id, i.name))).forEach(item => {
     const wrapper = document.createElement('div');
 
     // Ligne principale du noeud
