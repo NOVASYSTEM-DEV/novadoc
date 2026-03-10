@@ -568,17 +568,18 @@ async function loadUserPermissions() {
   } catch { userPermissions = []; userPermFolderIds = new Set(); userTransitIds = new Set(); }
 }
 
-function userCanAccessFolder(folderId, folderName) {
+function userCanAccessFolder(folderId, folderName, overridePath) {
   if (currentUserIsOwner || userPermissions === null) return true;
   if (!userPermissions.length) return false;
   // Accès direct sur ce dossier
   if (userPermFolderIds.has(folderId)) return true;
   // Accès via un dossier parent déjà dans currentPath
-  for (const seg of currentPath) {
+  const activePath = overridePath !== undefined ? overridePath : currentPath;
+  for (const seg of activePath) {
     if (userPermFolderIds.has(seg.id)) return true;
   }
   // Transit : vérifier si ce dossier apparaît dans le chemin d'une permission
-  const currentNames = currentPath.map(p => p.name);
+  const currentNames = activePath.map(p => p.name);
   const pathToCheck = folderName ? [...currentNames, folderName] : currentNames;
   console.log('[NovaDoc] userCanAccessFolder check transit:', pathToCheck, userPermissions.map(p=>p.FolderPath));
   for (const p of userPermissions) {
@@ -663,7 +664,7 @@ async function expandTreeTo(path) {
           const d = await graphCall(`/drives/${currentDriveId}/items/${segment.id}/children?$filter=folder ne null&$select=id,name,folder`);
           if (d.value && d.value.length) {
             const depth = parseInt(treeEl.className.match(/depth-(\d)/)?.[1] || '0');
-            buildTreeNodes(d.value, childContainer, depth + 1);
+            buildTreeNodes(d.value, childContainer, depth + 1, [...ancestorPath, {id: item.id, name: item.name}]);
             if (toggleBtn) toggleBtn.querySelector('svg').style.opacity = '1';
           }
         } catch {}
@@ -745,12 +746,13 @@ async function loadTree(forceReload=false) {
   root.innerHTML = '';
   try {
     const data = await graphCall(`/drives/${currentDriveId}/root/children?$filter=folder ne null&$select=id,name,folder`);
-    buildTreeNodes(data.value||[], root, 0);
+    buildTreeNodes(data.value||[], root, 0, []);
   } catch(e) { console.error('Tree:', e); }
 }
 
-function buildTreeNodes(items, container, depth) {
-  items.filter(i => i.folder && (currentUserIsOwner || userCanAccessFolder(i.id, i.name))).forEach(item => {
+function buildTreeNodes(items, container, depth, ancestorPath) {
+  ancestorPath = ancestorPath || [];
+  items.filter(i => i.folder && (currentUserIsOwner || userCanAccessFolderFromRoot(i.id, i.name, ancestorPath))).forEach(item => {
     const wrapper = document.createElement('div');
 
     // Ligne principale du noeud
@@ -783,7 +785,7 @@ function buildTreeNodes(items, container, depth) {
       try {
         const d = await graphCall(`/drives/${currentDriveId}/items/${item.id}/children?$filter=folder ne null&$select=id,name,folder`);
         if (d.value && d.value.length) {
-          buildTreeNodes(d.value, childContainer, depth + 1);
+          buildTreeNodes(d.value, childContainer, depth + 1, [...ancestorPath, {id: item.id, name: item.name}]);
           toggleBtn.querySelector('svg').style.opacity = '1';
         }
       } catch(e) { console.warn('tree load:', e); }
