@@ -1429,10 +1429,11 @@ async function addPermission() {
         const listItemId = itemData.sharepointIds && itemData.sharepointIds.listItemId;
         const listId = spDocumentsListId || (itemData.sharepointIds && itemData.sharepointIds.listId);
         if (listItemId && listId) {
-          const itemBase = SP_SITE_URL+"/_api/web/lists(guid('"+listId+"'))/items("+listItemId+")";
-          const breakRes = await fetch(itemBase+'/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)', { method:'POST', headers:h });
-          console.log('[NovaDoc] breakroleinheritance:', breakRes.status);
-          // Assigner le rôle SP correspondant au niveau
+          const folderRelUrl = '/sites/TESTSHAREPOINTEXCEL/Documents' + (currentPath.length ? '/'+currentPath.map(p=>p.name).join('/') : '') + (ctxTarget ? '/'+ctxTarget.name : '');
+			const itemBase = SP_SITE_URL+"/_api/web/GetFolderByServerRelativeUrl('"+folderRelUrl+"')/ListItemAllFields";
+			const breakRes = await fetch(itemBase+'/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)', { method:'POST', headers:h });
+			console.log('[NovaDoc] breakroleinheritance:', breakRes.status);
+			// Assigner le rôle SP correspondant au niveau
           const roleNameMap = { 26:'Contrôle total', 27:'Modification', 28:'Collaboration', 29:'Lecture', 30:'Affichage seul' };
           const roleName = roleNameMap[groupId];
           console.log('[NovaDoc] userId:', userId, 'roleName:', roleName);
