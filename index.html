@@ -731,8 +731,21 @@ async function loadCurrentFolder(filter='') {
       } else if (level === 30) {
         currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
       } else {
-        // Vérifier si l'user est créateur du dossier courant
-        try {
+        // Pas de permission directe — vérifier si on hérite d'un parent avec collaboration+
+        const parentLevel = currentPath.length > 0 ? (() => {
+          for (let i = currentPath.length - 1; i >= 0; i--) {
+            const e = (userPermissions||[]).find(p => p.FolderId === currentPath[i].id);
+            if (e && e.Level <= 28) return e.Level;
+          }
+          return null;
+        })() : null;
+        if (parentLevel !== null) {
+          if (parentLevel <= 27) { currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = true; }
+          else { currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = false; }
+        } else {
+          currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
+        }
+      }
           const folderInfo = await graphCall(`/drives/${currentDriveId}/items/${folderId}?$select=createdBy`);
           const creator = folderInfo.createdBy && folderInfo.createdBy.user && folderInfo.createdBy.user.email;
           if (creator && creator.toLowerCase() === currentUserEmail.toLowerCase()) {
