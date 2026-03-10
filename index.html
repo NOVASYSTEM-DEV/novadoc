@@ -589,6 +589,8 @@ function userCanAccessFolder(folderId, folderName, overridePath) {
   return false;
 }
 function userCanNavigate(folderId, folderName) {
+  return true;
+}
   if (currentUserIsOwner || userPermissions === null) return true;
   if (!userPermissions.length) return false;
   if (userPermFolderIds.has(folderId)) return true;
@@ -730,24 +732,10 @@ async function loadCurrentFolder(filter='') {
         currentFolderViewOnly = false; currentFolderReadOnly = true; currentFolderCanDelete = false;
       } else if (level === 30) {
         currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
-      } else {
-        // Pas de permission directe — vérifier si on hérite d'un parent avec collaboration+
-        const parentLevel = currentPath.length > 0 ? (() => {
-          for (let i = currentPath.length - 1; i >= 0; i--) {
-            const e = (userPermissions||[]).find(p => p.FolderId === currentPath[i].id);
-            if (e && e.Level <= 28) return e.Level;
-          }
-          return null;
-        })() : null;
-        if (parentLevel !== null) {
-          if (parentLevel <= 27) { currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = true; }
-          else { currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = false; }
-        } else {
-          currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
-        }
+     } else {
+        currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = false;
       }
-          
-    }
+     }
     // Vérifier les permissions d'écriture sur les dossiers en parallèle
     const folders = items.filter(i => i.folder);
     await Promise.all(folders.map(async folder => {
@@ -767,7 +755,7 @@ async function loadCurrentFolder(filter='') {
         folder._canWrite = currentUserIsOwner; // si pas de permissions explicites, se base sur owner
       }
     }));
-    const visibleItems = currentUserIsOwner ? items : items.filter(i => {
+    const visibleItems = items;
   if (!i.folder) return true;
   if (userPermFolderIds.has(i.id)) return true;
   // Héritage : vérifier si un ancêtre direct a niveau collaboration+
