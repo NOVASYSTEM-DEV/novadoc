@@ -767,7 +767,7 @@ async function loadCurrentFolder(filter='') {
         folder._canWrite = currentUserIsOwner; // si pas de permissions explicites, se base sur owner
       }
     }));
-    onst visibleItems = currentUserIsOwner ? items : items.filter(i => {
+    const visibleItems = currentUserIsOwner ? items : items.filter(i => {
   if (!i.folder) return true;
   if (userPermFolderIds.has(i.id)) return true;
   // Héritage : vérifier si un ancêtre direct a niveau collaboration+
