@@ -592,6 +592,21 @@ function userCanAccessFolder(folderId, folderName, overridePath) {
   return false;
 }
 
+function userCanAccessFolderFromRoot(folderId, folderName, ancestorPath) {
+  if (currentUserIsOwner || userPermissions === null) return true;
+  if (!userPermissions.length) return false;
+  if (userPermFolderIds.has(folderId)) return true;
+  for (const seg of (ancestorPath||[])) {
+    if (userPermFolderIds.has(seg.id)) return true;
+  }
+  const pathToCheck = [...(ancestorPath||[]).map(p=>p.name), folderName];
+  for (const p of userPermissions) {
+    if (!p._pathParts) continue;
+    const match = pathToCheck.every((name, i) => p._pathParts[i] && p._pathParts[i].toUpperCase() === name.toUpperCase());
+    if (match) return true;
+  }
+  return false;
+}
 function userHasDirectAccess(folderId) {
   if (currentUserIsOwner || userPermissions === null) return true;
   if (userPermFolderIds.has(folderId)) return true;
