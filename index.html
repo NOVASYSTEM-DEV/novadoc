@@ -628,7 +628,7 @@ async function loadSiteAndDrive() {
     // Récupérer l'ID SP de la bibliothèque Documents
     try {
       const token = await getSpToken();
-      const r = await fetch(SP_SITE_URL+'/_api/web/lists/getbytitle('Documents')?$select=Id', {
+      const r = await fetch(SP_SITE_URL+"/_api/web/lists/getbytitle('Documents')?$select=Id", {
         headers:{ Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' }
       });
       const d = await r.json();
