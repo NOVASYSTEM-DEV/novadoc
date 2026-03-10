@@ -583,7 +583,7 @@ function userCanAccessFolder(folderId, folderName) {
   console.log('[NovaDoc] userCanAccessFolder check transit:', pathToCheck, userPermissions.map(p=>p.FolderPath));
   for (const p of userPermissions) {
     if (!p._pathParts) continue;
-    const permParts = p._pathParts.slice(1); // Ignorer "Documents" racine
+    const permParts = p._pathParts; // Ignorer "Documents" racine
     const match = pathToCheck.every((name, i) => permParts[i] && permParts[i].toUpperCase() === name.toUpperCase());
     console.log('[NovaDoc] comparing', pathToCheck, 'vs', permParts, '→', match);
     if (match) return true;
