@@ -591,17 +591,6 @@ function userCanAccessFolder(folderId, folderName, overridePath) {
 function userCanNavigate(folderId, folderName) {
   return true;
 }
-  if (currentUserIsOwner || userPermissions === null) return true;
-  if (!userPermissions.length) return false;
-  if (userPermFolderIds.has(folderId)) return true;
-  /// Héritage : uniquement depuis le dossier courant direct
-  const currentFolder = currentPath[currentPath.length - 1];
-  if (currentFolder && userPermFolderIds.has(currentFolder.id)) {
-    const currentLevel = (userPermissions.find(p => p.FolderId === currentFolder.id)||{}).Level;
-    if (currentLevel && currentLevel <= 28) return true;
-  }
-  return userCanAccessFolder(folderId, folderName);
-}
 function userCanAccessFolderFromRoot(folderId, folderName, ancestorPath) {
   if (currentUserIsOwner || userPermissions === null) return true;
   if (!userPermissions.length) return false;
