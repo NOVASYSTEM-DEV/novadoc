@@ -744,17 +744,7 @@ async function loadCurrentFolder(filter='') {
         folder._canWrite = currentUserIsOwner; // si pas de permissions explicites, se base sur owner
       }
     }));
-    const visibleItems = items;
-  if (!i.folder) return true;
-  if (userPermFolderIds.has(i.id)) return true;
-  // Héritage : vérifier si un ancêtre direct a niveau collaboration+
-  for (let j = currentPath.length - 1; j >= 0; j--) {
-    const e = (userPermissions||[]).find(p => p.FolderId === currentPath[j].id);
-    if (e && e.Level <= 28) return true;
-    if (e) break; // ancêtre trouvé mais niveau insuffisant
-  }
-  return userCanAccessFolder(i.id, i.name);
-});
+     const visibleItems = items;
 	renderContent(visibleItems);
     const foldersCount = items.filter(i=>i.folder).length, files = items.filter(i=>i.file);
     document.getElementById('status-count').textContent = `${foldersCount} dossier(s) · ${files.length} fichier(s)`;
