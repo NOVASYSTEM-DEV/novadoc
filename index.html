@@ -562,9 +562,8 @@ async function loadUserPermissions() {
     userPermissions.forEach(p => {
       if (!p.FolderPath) return;
       const parts = p.FolderPath.split('/');
-      // On stocke les noms intermédiaires — mais on a besoin des IDs
-      // Stocker le FolderPath pour comparaison par chemin
-      p._pathParts = parts;
+      // Exclure le premier segment "Documents" pour matcher avec currentPath
+      p._pathParts = parts[0] === 'Documents' ? parts.slice(1) : parts;
     });
   } catch { userPermissions = []; userPermFolderIds = new Set(); userTransitIds = new Set(); }
 }
