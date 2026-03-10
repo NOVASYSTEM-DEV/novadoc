@@ -588,7 +588,14 @@ function userCanAccessFolder(folderId, folderName, overridePath) {
   }
   return false;
 }
-
+function userCanNavigate(folderId, folderName) {
+  if (currentUserIsOwner || userPermissions === null) return true;
+  if (!userPermissions.length) return false;
+  if (userPermFolderIds.has(folderId)) return true;
+  // Héritage : un ancêtre dans currentPath a une permission
+  if (currentPath.some(p => userPermFolderIds.has(p.id))) return true;
+  return userCanAccessFolder(folderId, folderName);
+}
 function userCanAccessFolderFromRoot(folderId, folderName, ancestorPath) {
   if (currentUserIsOwner || userPermissions === null) return true;
   if (!userPermissions.length) return false;
@@ -812,7 +819,7 @@ function buildTreeNodes(items, container, depth, ancestorPath) {
     // ── FLÈCHE : déplier / replier ──────────────────────────────────────
     toggleBtn.addEventListener('click', async e => {
       e.stopPropagation();
-      if (!userCanAccessFolder(item.id)) {
+      if (!userCanNavigate(item.id)) {
         showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+item.name+'".');
         return;
       }
@@ -824,7 +831,7 @@ function buildTreeNodes(items, container, depth, ancestorPath) {
     // ── LABEL : naviguer dans le dossier ───────────────────────────────
     label.addEventListener('click', async e => {
       e.stopPropagation();
-      if (!userCanAccessFolder(item.id, item.name)) {
+      if (!userCanNavigate(item.id, item.name)) {
         showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+item.name+'".');
         return;
       }
@@ -994,7 +1001,7 @@ function attachItemEvents(content, items) {
       const { id, name, type, url } = el.dataset;
       clearSelection();
       if (type==='folder') {
-        if (!userCanAccessFolder(id, name)) {
+        if (!userCanNavigate(id, name)) {
           showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+name+'".');
           return;
         }
