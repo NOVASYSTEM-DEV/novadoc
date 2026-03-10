@@ -767,12 +767,15 @@ async function loadCurrentFolder(filter='') {
         folder._canWrite = currentUserIsOwner; // si pas de permissions explicites, se base sur owner
       }
     }));
-    const visibleItems = currentUserIsOwner ? items : items.filter(i => {
+    onst visibleItems = currentUserIsOwner ? items : items.filter(i => {
   if (!i.folder) return true;
   if (userPermFolderIds.has(i.id)) return true;
-  // Héritage : si un ancêtre dans currentPath a une permission, accès autorisé
-  const currentFolder = currentPath[currentPath.length - 1];
-  if (currentFolder && userPermFolderIds.has(currentFolder.id)) return true;
+  // Héritage : vérifier si un ancêtre direct a niveau collaboration+
+  for (let j = currentPath.length - 1; j >= 0; j--) {
+    const e = (userPermissions||[]).find(p => p.FolderId === currentPath[j].id);
+    if (e && e.Level <= 28) return true;
+    if (e) break; // ancêtre trouvé mais niveau insuffisant
+  }
   return userCanAccessFolder(i.id, i.name);
 });
 	renderContent(visibleItems);
