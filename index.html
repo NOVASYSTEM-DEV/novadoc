@@ -731,7 +731,18 @@ async function loadCurrentFolder(filter='') {
       } else if (level === 30) {
         currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
       } else {
-        currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
+        // Vérifier si l'user est créateur du dossier courant
+        try {
+          const folderInfo = await graphCall(`/drives/${currentDriveId}/items/${folderId}?$select=createdBy`);
+          const creator = folderInfo.createdBy && folderInfo.createdBy.user && folderInfo.createdBy.user.email;
+          if (creator && creator.toLowerCase() === currentUserEmail.toLowerCase()) {
+            currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = true;
+          } else {
+            currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
+          }
+        } catch {
+          currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
+        }
       }
     }
     // Vérifier les permissions d'écriture sur les dossiers en parallèle
