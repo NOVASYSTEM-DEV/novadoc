@@ -574,10 +574,7 @@ function userCanAccessFolder(folderId, folderName, overridePath) {
   // Accès direct sur ce dossier
   if (userPermFolderIds.has(folderId)) return true;
   // Accès via un dossier parent déjà dans currentPath
-  const activePath = overridePath !== undefined ? overridePath : currentPath;
-  for (const seg of activePath) {
-    if (userPermFolderIds.has(seg.id)) return true;
-  }
+  cconst activePath = overridePath !== undefined ? overridePath : currentPath;
   // Transit : vérifier si ce dossier apparaît dans le chemin d'une permission
   const currentNames = activePath.map(p => p.name);
   const pathToCheck = folderName ? [...currentNames, folderName] : currentNames;
