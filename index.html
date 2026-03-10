@@ -745,8 +745,8 @@ async function loadCurrentFolder(filter='') {
     const visibleItems = currentUserIsOwner ? items : items.filter(i => {
   if (!i.folder) return true;
   if (userPermFolderIds.has(i.id)) return true;
-  // Si on est dans un dossier avec accès direct, tous les sous-dossiers sont visibles
-  if (currentPath.length > 0 && currentPath.some(p => userPermFolderIds.has(p.id))) return true;
+  // Héritage : si un ancêtre dans currentPath a une permission, accès autorisé
+  if (currentPath.some(p => userPermFolderIds.has(p.id))) return true;
   return userCanAccessFolder(i.id, i.name);
 });
 	renderContent(visibleItems);
