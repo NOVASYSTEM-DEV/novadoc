@@ -744,7 +744,10 @@ async function loadCurrentFolder(filter='') {
      const visibleItems = currentUserIsOwner ? items : items.filter(i => {
       if (!i.folder) return true;
       if (userPermFolderIds.has(i.id)) return true;
-      if (currentPath.some(p => userPermFolderIds.has(p.id))) return true;
+      if (currentPath.some(p => {
+        const e = (userPermissions||[]).find(x => x.FolderId === p.id);
+        return e && e.Level <= 28;
+      })) return true;
       return false;
     });
 	renderContent(visibleItems);
