@@ -294,9 +294,8 @@
         <input type="text" id="perm-add-email" class="modal-input" placeholder="prenom.nom@domaine.com">
         <label class="modal-label" style="margin-top:12px">Niveau d'accès</label>
         <select id="perm-add-role" class="modal-input">
-          <option value="owner">Contrôle total — gérer les droits, tout faire</option>
+          <option value="owner">Contrôle total — gérer les droits, créer, modifier, supprimer</option>
           <option value="write" selected>Modification — créer, modifier, supprimer</option>
-          <option value="contribute">Collaboration — créer et modifier (sans supprimer)</option>
           <option value="read">Lecture seule — voir et télécharger</option>
         </select>
         <button class="btn-primary" style="margin-top:14px;width:100%" onclick="addPermission()">➕ Ajouter l'accès</button>
@@ -495,23 +494,21 @@ async function getToken() {
 
 let currentUserEmail = '';
 let currentUserName = '';
-let currentFolderRole = 'read'; // 'owner' | 'write' | 'contribute' | 'read'
+let currentFolderRole = 'read'; // 'owner' | 'write' | 'read'
 
 // Déduire le rôle NovaDoc depuis les rôles Graph/SP
 function resolveRole(roles) {
   if (!roles || !roles.length) return 'read';
   const r = roles.map(x => x.toLowerCase());
   if (r.some(x => ['owner','sp.full control','fullcontrol'].includes(x))) return 'owner';
-  if (r.some(x => ['write','sp.editonlyitems','editonlyitems','design'].includes(x))) return 'write';
-  if (r.some(x => ['contribute','sp.contribute','sp.collaboration','collaboration'].includes(x))) return 'contribute';
+  if (r.some(x => ['write','contribute','sp.contribute','sp.collaboration','collaboration','sp.editonlyitems','design'].includes(x))) return 'write';
   return 'read';
 }
 
 // Appliquer le rôle à l'interface (toolbar, context menu, sélection)
 function applyRoleUI() {
-  const canEdit    = ['owner','write','contribute'].includes(currentFolderRole);
-  const canDelete  = ['owner','write'].includes(currentFolderRole);
-  const canManage  = currentFolderRole === 'owner';
+  const canEdit   = ['owner','write'].includes(currentFolderRole);
+  const canManage = currentFolderRole === 'owner';
 
   // Toolbar
   document.querySelectorAll('.contributor-only').forEach(el => {
@@ -519,15 +516,15 @@ function applyRoleUI() {
   });
   // Bouton supprimer dans la barre sélection
   const selDelBtn = document.querySelector('#selection-bar .sel-btn.danger');
-  if (selDelBtn) selDelBtn.style.display = canDelete ? '' : 'none';
+  if (selDelBtn) selDelBtn.style.display = canEdit ? '' : 'none';
   // Gérer les accès dans le ctx menu
   const permBtn = document.getElementById('ctx-permissions');
   if (permBtn) permBtn.style.display = canManage ? '' : 'none';
   // Supprimer dans le ctx menu
   const deleteBtn = document.getElementById('ctx-delete');
-  if (deleteBtn) deleteBtn.style.display = canDelete ? '' : 'none';
+  if (deleteBtn) deleteBtn.style.display = canEdit ? '' : 'none';
   const sepDel = document.getElementById('ctx-sep-del');
-  if (sepDel) sepDel.style.display = canDelete ? '' : 'none';
+  if (sepDel) sepDel.style.display = canEdit ? '' : 'none';
 }
 
 
@@ -612,6 +609,41 @@ async function expandTreeTo(path) {
   }
 }
 
+// Détecter le rôle sur un item — remonte sur les parents si permissions vides (héritage SP)
+async function detectRole(itemId) {
+  const visited = new Set();
+  let id = itemId;
+  while (id && !visited.has(id)) {
+    visited.add(id);
+    const permsData = await graphCall(`/drives/${currentDriveId}/items/${id}/permissions`);
+    const perms = permsData.value || [];
+
+    // Chercher une permission directe pour l'utilisateur courant
+    const myPerm = perms.find(p => {
+      const u = (p.grantedToV2&&p.grantedToV2.user)||(p.grantedTo&&p.grantedTo.user)||{};
+      return (u.email||'').toLowerCase() === currentUserEmail;
+    });
+    if (myPerm) return resolveRole(myPerm.roles);
+
+    // Chercher via les groupes (grantedToIdentities)
+    const groupPerm = perms.find(p => {
+      const ids = p.grantedToIdentitiesV2 || p.grantedToIdentities || [];
+      return ids.length > 0 && p.roles && p.roles.length > 0;
+    });
+    if (groupPerm) return resolveRole(groupPerm.roles);
+
+    // Permissions vides = héritage actif → remonter au parent
+    if (id === 'root') break;
+    try {
+      const itemData = await graphCall(`/drives/${currentDriveId}/items/${id}?$select=id,parentReference`);
+      const parentId = itemData.parentReference && itemData.parentReference.id;
+      if (!parentId || parentId === id) break;
+      id = parentId;
+    } catch { break; }
+  }
+  return 'read'; // aucune permission trouvée
+}
+
 async function loadCurrentFolder(filter='') {
   showLoading();
   try {
@@ -619,16 +651,10 @@ async function loadCurrentFolder(filter='') {
     const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
 
-    // Détecter le rôle de l'utilisateur sur le dossier courant
+    // Détecter le rôle de l'utilisateur — remonte sur les parents si héritage actif
     try {
-      const permsData = await graphCall(`/drives/${currentDriveId}/items/${folderId}/permissions`);
-      const myPerm = (permsData.value||[]).find(p => {
-        const u = (p.grantedToV2&&p.grantedToV2.user)||(p.grantedTo&&p.grantedTo.user)||{};
-        const email = (u.email||'').toLowerCase();
-        return email === currentUserEmail;
-      });
-      currentFolderRole = myPerm ? resolveRole(myPerm.roles) : 'read';
-    } catch { currentFolderRole = 'write'; } // 403 = owner implicite sur son propre tenant
+      currentFolderRole = await detectRole(folderId);
+    } catch { currentFolderRole = 'write'; } // 403 = admin implicite
 
     applyRoleUI();
     renderContent(items);
@@ -1129,7 +1155,6 @@ async function addPermission() {
   // Mapping NovaDoc → rôles Graph API
   const graphRole = role === 'owner' ? 'owner'
                   : role === 'write' ? 'write'
-                  : role === 'contribute' ? 'write'  // Graph n'a pas "contribute" natif → write sans supprimer géré par SP
                   : 'read';
 
   try {
@@ -1221,10 +1246,9 @@ function updateRoleDesc() {
   const desc = document.getElementById('perm-role-desc');
   if (!sel || !desc) return;
   const descs = {
-    owner:      { text: 'Contrôle total : gérer les droits, créer, modifier, supprimer', color: '#e67e22' },
-    write:      { text: 'Modification : créer, modifier et supprimer des éléments', color: '#2980b9' },
-    contribute: { text: 'Collaboration : créer et modifier, mais pas supprimer', color: '#8e44ad' },
-    read:       { text: 'Lecture seule : voir et télécharger uniquement', color: '#27ae60' }
+    owner: { text: 'Contrôle total : gérer les droits, créer, modifier, supprimer', color: '#e67e22' },
+    write: { text: 'Modification : créer, modifier et supprimer des éléments', color: '#2980b9' },
+    read:  { text: 'Lecture seule : voir et télécharger uniquement', color: '#27ae60' }
   };
   const d = descs[sel.value];
   if (d) { desc.textContent = d.text; desc.style.borderLeft = '3px solid '+d.color; desc.style.paddingLeft = '10px'; desc.style.color = 'var(--text-muted)'; desc.style.fontSize = '12px'; desc.style.marginTop = '6px'; }
