@@ -959,14 +959,16 @@ function openFileLocal(name, url, parentPath, itemId) {
   };
   const protocol = protocols[ext];
   if (protocol) {
-    // parentPath = "/drives/xxx/root:/Dossier/SousDossier" ou "/drives/xxx/root:"
-    // On extrait le chemin relatif après "root:"
     const rootIdx = (parentPath || '').indexOf('root:');
     const rel = rootIdx >= 0 ? decodeURIComponent((parentPath || '').substring(rootIdx + 5)) : '';
-    // Base SharePoint : https://tenant.sharepoint.com/sites/SITE/Documents
     const base = SP_DOC_BASE.replace(/\/$/, '');
     const fileUrl = base + rel + '/' + name;
-    window.location.href = protocol + ':ofe|u|' + fileUrl;
+    console.log('[NovaDoc] name:', name);
+    console.log('[NovaDoc] parentPath:', parentPath);
+    console.log('[NovaDoc] rel:', rel);
+    console.log('[NovaDoc] SP_DOC_BASE:', SP_DOC_BASE);
+    console.log('[NovaDoc] fileUrl final:', fileUrl);
+    window.open(protocol + ':ofe|u|' + fileUrl, '_self');
   } else {
     const editUrl = (url || '').replace('action=default', 'action=edit');
     window.open(editUrl, '_blank');
