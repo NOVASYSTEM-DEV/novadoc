@@ -958,10 +958,10 @@ function openFileLocal(name, url, parentPath, itemId) {
   };
   const protocol = protocols[ext];
   if (protocol) {
-    // Construire l'URL directe depuis parentPath : /drives/xxx/root:/Dossier/SousDossier
-    const rel = decodeURIComponent((parentPath || '').split('root:')[1] || '');
-    const directUrl = SP_DOC_BASE + rel + '/' + name;
-    window.location.href = protocol + ':ofe|u|' + directUrl;
+    // Utiliser directement le webUrl Graph — URL SharePoint exacte du fichier
+    // Nettoyer les paramètres d'action éventuels
+    const cleanUrl = (url || '').split('?')[0];
+    window.location.href = protocol + ':ofe|u|' + cleanUrl;
   } else {
     const editUrl = url.replace('action=default', 'action=edit');
     window.open(editUrl, '_blank');
