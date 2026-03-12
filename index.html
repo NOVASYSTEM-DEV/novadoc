@@ -493,19 +493,51 @@ async function getToken() {
 
 let currentUserEmail = '';
 let currentUserName = '';
+let currentFolderRole = 'read'; // 'owner' | 'write' | 'contribute' | 'read'
+
+// Déduire le rôle NovaDoc depuis les rôles Graph/SP
+function resolveRole(roles) {
+  if (!roles || !roles.length) return 'read';
+  const r = roles.map(x => x.toLowerCase());
+  if (r.some(x => ['owner','sp.full control','fullcontrol'].includes(x))) return 'owner';
+  if (r.some(x => ['write','sp.editonlyitems','editonlyitems','design'].includes(x))) return 'write';
+  if (r.some(x => ['contribute','sp.contribute','sp.collaboration','collaboration'].includes(x))) return 'contribute';
+  return 'read';
+}
+
+// Appliquer le rôle à l'interface (toolbar, context menu, sélection)
+function applyRoleUI() {
+  const canEdit    = ['owner','write','contribute'].includes(currentFolderRole);
+  const canDelete  = ['owner','write'].includes(currentFolderRole);
+  const canManage  = currentFolderRole === 'owner';
+
+  // Toolbar
+  document.querySelectorAll('.contributor-only').forEach(el => {
+    el.style.display = canEdit ? '' : 'none';
+  });
+  // Bouton supprimer dans la barre sélection
+  const selDelBtn = document.querySelector('#selection-bar .sel-btn.danger');
+  if (selDelBtn) selDelBtn.style.display = canDelete ? '' : 'none';
+  // Gérer les accès dans le ctx menu
+  const permBtn = document.getElementById('ctx-permissions');
+  if (permBtn) permBtn.style.display = canManage ? '' : 'none';
+  // Supprimer dans le ctx menu
+  const deleteBtn = document.getElementById('ctx-delete');
+  if (deleteBtn) deleteBtn.style.display = canDelete ? '' : 'none';
+  const sepDel = document.getElementById('ctx-sep-del');
+  if (sepDel) sepDel.style.display = canDelete ? '' : 'none';
+}
 
 
 async function afterLogin(account) {
   await getToken();
   const name = account.name || account.username;
   currentUserEmail = (account.username || '').toLowerCase();
-  currentUserName = (account.name || '').toLowerCase();
+  currentUserName  = (account.name || '').toLowerCase();
   const initials = name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
   document.getElementById('user-name').textContent = name;
   document.getElementById('user-avatar').textContent = initials;
   document.getElementById('login-screen').style.display = 'none';
-  isContributor = true;
-  document.querySelectorAll('.contributor-only').forEach(el => el.style.display = '');
   await loadSiteAndDrive();
 }
 
@@ -584,6 +616,19 @@ async function loadCurrentFolder(filter='') {
     const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length-1].id;
     const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
+
+    // Détecter le rôle de l'utilisateur sur le dossier courant
+    try {
+      const permsData = await graphCall(`/drives/${currentDriveId}/items/${folderId}/permissions`);
+      const myPerm = (permsData.value||[]).find(p => {
+        const u = (p.grantedToV2&&p.grantedToV2.user)||(p.grantedTo&&p.grantedTo.user)||{};
+        const email = (u.email||'').toLowerCase();
+        return email === currentUserEmail;
+      });
+      currentFolderRole = myPerm ? resolveRole(myPerm.roles) : 'read';
+    } catch { currentFolderRole = 'write'; } // 403 = owner implicite sur son propre tenant
+
+    applyRoleUI();
     renderContent(items);
     const foldersCount = items.filter(i=>i.folder).length, files = items.filter(i=>i.file);
     document.getElementById('status-count').textContent = `${foldersCount} dossier(s) · ${files.length} fichier(s)`;
@@ -899,15 +944,19 @@ function openFileLocal(name, url, parentPath, itemId) {
 function showCtxMenu(e, type) {
   const menu = document.getElementById('ctx-menu');
   const isFile = type === 'file';
+  const canDelete = ['owner','write'].includes(currentFolderRole);
+  const canManage = currentFolderRole === 'owner';
+
   document.getElementById('ctx-open-local').style.display = isFile ? '' : 'none';
   document.getElementById('ctx-download').style.display = isFile ? '' : 'none';
-  // Versions disponibles pour fichiers seulement
   const versionsEl = document.getElementById('ctx-versions');
-  const sepDelEl = document.getElementById('ctx-sep-del');
-  const deleteEl = document.getElementById('ctx-delete');
-  if (versionsEl) versionsEl.style.display = type==='file' ? '' : 'none';
-  if (sepDelEl) sepDelEl.style.display = '';
-  if (deleteEl) deleteEl.style.display = '';
+  const sepDelEl   = document.getElementById('ctx-sep-del');
+  const deleteEl   = document.getElementById('ctx-delete');
+  const permBtn    = document.getElementById('ctx-permissions');
+  if (versionsEl) versionsEl.style.display = isFile ? '' : 'none';
+  if (sepDelEl)   sepDelEl.style.display   = canDelete ? '' : 'none';
+  if (deleteEl)   deleteEl.style.display   = canDelete ? '' : 'none';
+  if (permBtn)    permBtn.style.display    = canManage ? '' : 'none';
   menu.style.display = 'block';
   const x = Math.min(e.clientX, window.innerWidth-220);
   const y = Math.min(e.clientY, window.innerHeight-300);
@@ -993,6 +1042,7 @@ async function ctxVersions() {
 
 async function ctxDelete() {
   if (!ctxTarget) return;
+  if (!['owner','write'].includes(currentFolderRole)) { alert('Vous ne disposez pas des droits nécessaires pour supprimer cet élément.'); return; }
   if (!confirm(`Supprimer "${ctxTarget.name}" ?\n\nL'élément sera récupérable pendant 30 jours par l'administrateur.`)) return;
   try {
     await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}`, 'DELETE');
@@ -1356,6 +1406,7 @@ async function pasteItems() {
 
 async function selDelete() {
   if (!selectedItems.length) return;
+  if (!['owner','write'].includes(currentFolderRole)) { alert('Vous ne disposez pas des droits nécessaires pour supprimer des éléments.'); return; }
   if (!confirm(`Supprimer ${selectedItems.length} élément(s) ?\n\nLes éléments seront récupérables pendant 30 jours par l'administrateur.`)) return;
   const toDelete = [...selectedItems];
   clearSelection();
