@@ -829,7 +829,8 @@ function renderContent(items) {
 
 function getItemData(item) {
   const isFolder = !!item.folder;
-  const parentPath = item.parentReference ? (item.parentReference.path||'').replace('/drive/root:','') : '';
+  // Conserver le path complet avec root: pour openFileLocal
+  const parentPath = item.parentReference ? (item.parentReference.path || '') : '';
   const createdBy = item.createdBy ? (item.createdBy.user ? item.createdBy.user.email || item.createdBy.user.displayName || '' : '') : '';
   return { isFolder, parentPath, createdBy };
 }
@@ -958,12 +959,16 @@ function openFileLocal(name, url, parentPath, itemId) {
   };
   const protocol = protocols[ext];
   if (protocol) {
-    // Utiliser directement le webUrl Graph — URL SharePoint exacte du fichier
-    // Nettoyer les paramètres d'action éventuels
-    const cleanUrl = (url || '').split('?')[0];
-    window.location.href = protocol + ':ofe|u|' + cleanUrl;
+    // parentPath = "/drives/xxx/root:/Dossier/SousDossier" ou "/drives/xxx/root:"
+    // On extrait le chemin relatif après "root:"
+    const rootIdx = (parentPath || '').indexOf('root:');
+    const rel = rootIdx >= 0 ? decodeURIComponent((parentPath || '').substring(rootIdx + 5)) : '';
+    // Base SharePoint : https://tenant.sharepoint.com/sites/SITE/Documents
+    const base = SP_DOC_BASE.replace(/\/$/, '');
+    const fileUrl = base + rel + '/' + name;
+    window.location.href = protocol + ':ofe|u|' + fileUrl;
   } else {
-    const editUrl = url.replace('action=default', 'action=edit');
+    const editUrl = (url || '').replace('action=default', 'action=edit');
     window.open(editUrl, '_blank');
   }
 }
