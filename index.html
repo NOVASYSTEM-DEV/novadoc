@@ -741,7 +741,12 @@ async function loadCurrentFolder(filter='') {
         folder._canWrite = currentUserIsOwner; // si pas de permissions explicites, se base sur owner
       }
     }));
-     const visibleItems = items;
+     const visibleItems = currentUserIsOwner ? items : items.filter(i => {
+      if (!i.folder) return true;
+      if (userPermFolderIds.has(i.id)) return true;
+      if (currentPath.some(p => userPermFolderIds.has(p.id))) return true;
+      return false;
+    });
 	renderContent(visibleItems);
     const foldersCount = items.filter(i=>i.folder).length, files = items.filter(i=>i.file);
     document.getElementById('status-count').textContent = `${foldersCount} dossier(s) · ${files.length} fichier(s)`;
