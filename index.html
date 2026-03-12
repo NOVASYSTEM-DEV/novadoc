@@ -1923,6 +1923,10 @@ async function createNew(type) {
   const folderId = currentPath.length===0 ? 'root' : currentPath[currentPath.length-1].id;
   
   if (type==='folder') {
+    if (currentPath.length === 0 && !currentUserIsOwner) {
+      showInfoModal('🔒', 'Accès refusé', 'Seul l\'administrateur peut créer des dossiers à la racine.');
+      return;
+    }
     const name = prompt('Nom du dossier :');
     if (!name) return;
     try {
