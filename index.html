@@ -1007,43 +1007,99 @@ function ctxShare() {
 
 // ─── GESTION DES PERMISSIONS ─────────────────────────────────────────────────
 
-// ─── Charger les permissions Graph du dossier ─────────────────────────────────
+// Charger les groupes SP et leurs droits sur l'élément via Graph
 async function loadPermissions() {
   const list = document.getElementById('perm-members-list');
   list.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
   if (!ctxTarget) { list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Sélectionnez un élément</div>'; return; }
   try {
     const data = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions');
-    const perms = (data.value || []).filter(p => p.grantedTo || p.grantedToV2);
+    const perms = (data.value || []);
     if (!perms.length) {
       list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">Aucune permission explicite (héritage SharePoint actif)</div>';
       return;
     }
     let html = '';
     perms.forEach(p => {
-      const user = (p.grantedTo && p.grantedTo.user) || (p.grantedToV2 && p.grantedToV2.user) || {};
-      const name = user.displayName || user.email || 'Utilisateur inconnu';
-      const email = user.email || '';
-      const initials = name.substring(0,2).toUpperCase();
-      const role = simplifyRole(p.roles);
-      const label = roleLabel(role);
-      const color = roleBadgeColor(role);
-      html += '<div class="perm-member-row">';
-      html += '<div class="perm-avatar">'+initials+'</div>';
-      html += '<div class="perm-member-info"><div class="perm-member-name">'+name+'</div><div class="perm-member-email">'+email+'</div></div>';
-      html += '<span style="font-size:11px;padding:3px 8px;border-radius:10px;background:'+color+';color:white">'+label+'</span>';
-      html += '<button class="perm-remove-btn" data-permid="'+p.id+'" onclick="removePermission(this.dataset.permid)" title="Retirer">✕</button>';
-      html += '</div>';
+      // Groupes SP (grantedToIdentitiesV2 ou grantedToIdentities)
+      const identities = p.grantedToIdentitiesV2 || p.grantedToIdentities || [];
+      if (identities.length) {
+        identities.forEach(ident => {
+          const grp = ident.group || ident.siteGroup || {};
+          const name = grp.displayName || 'Groupe inconnu';
+          const initials = name.substring(0,2).toUpperCase();
+          const role = simplifyRole(p.roles);
+          html += buildPermRow(initials, name, '', role, p.id);
+        });
+        return;
+      }
+      // Utilisateurs individuels (grantedTo / grantedToV2)
+      const user = (p.grantedToV2 && p.grantedToV2.user) || (p.grantedTo && p.grantedTo.user) || null;
+      if (user) {
+        const name = user.displayName || user.email || 'Utilisateur';
+        const email = user.email || '';
+        const initials = name.substring(0,2).toUpperCase();
+        const role = simplifyRole(p.roles);
+        html += buildPermRow(initials, name, email, role, p.id);
+      }
     });
-    list.innerHTML = html;
+    list.innerHTML = html || '<div style="padding:20px;text-align:center;color:var(--text-muted)">Aucun accès configuré</div>';
   } catch(e) {
     if (e.message.includes('403') || e.message.includes('401')) {
-      list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Les permissions sont héritées de SharePoint.<br>Gérez-les directement dans l\'interface SharePoint.</div>';
+      list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Permissions héritées de SharePoint — gérez-les dans l\'admin SP.</div>';
     } else {
       list.innerHTML = '<div style="color:#e74c3c;padding:16px">Erreur: '+e.message+'</div>';
     }
   }
 }
+
+function buildPermRow(initials, name, email, role, permId) {
+  const label = roleLabel(role);
+  const color = roleBadgeColor(role);
+  return '<div class="perm-member-row">'
+    + '<div class="perm-avatar">'+initials+'</div>'
+    + '<div class="perm-member-info"><div class="perm-member-name">'+name+'</div>'
+    + (email ? '<div class="perm-member-email">'+email+'</div>' : '')
+    + '</div>'
+    + '<span style="font-size:11px;padding:3px 8px;border-radius:10px;background:'+color+';color:white">'+label+'</span>'
+    + '<button class="perm-remove-btn" data-permid="'+permId+'" onclick="removePermission(this.dataset.permid)" title="Retirer">✕</button>'
+    + '</div>';
+}
+
+async function addPermission() {
+  const email = document.getElementById('perm-add-email').value.trim();
+  const sel = document.getElementById('perm-add-role') || document.getElementById('perm-add-group');
+  const role = sel ? sel.value : 'read';
+  if (!email) { alert('Veuillez saisir un email.'); return; }
+  const btn = document.querySelector('#perm-tab-add .btn-primary');
+  btn.textContent = 'Ajout en cours...'; btn.disabled = true;
+  try {
+    await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/invite', 'POST', {
+      requireSignIn: true,
+      sendInvitation: false,
+      roles: [role === 'write' ? 'write' : 'read'],
+      recipients: [{ email }]
+    });
+    document.getElementById('perm-add-email').value = '';
+    switchPermTab('members');
+    await loadPermissions();
+    alert('✅ '+email+' — accès accordé !');
+  } catch(e) {
+    alert('Erreur: '+e.message);
+  } finally {
+    btn.textContent = "Ajouter l'accès"; btn.disabled = false;
+  }
+}
+
+async function removePermission(permId) {
+  if (!confirm('Supprimer cet accès ?')) return;
+  try {
+    await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions/'+permId, 'DELETE');
+    await loadPermissions();
+  } catch(e) { alert('Erreur suppression: '+e.message); }
+}
+
+
 
 async function showPermissionsModal() {
   if (!ctxTarget) return;
