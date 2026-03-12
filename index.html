@@ -294,8 +294,10 @@
         <input type="text" id="perm-add-email" class="modal-input" placeholder="prenom.nom@domaine.com">
         <label class="modal-label" style="margin-top:12px">Niveau d'accès</label>
         <select id="perm-add-role" class="modal-input">
-          <option value="read">Lecture seule</option>
-          <option value="write" selected>Modification</option>
+          <option value="owner">Contrôle total — gérer les droits, tout faire</option>
+          <option value="write" selected>Modification — créer, modifier, supprimer</option>
+          <option value="contribute">Collaboration — créer et modifier (sans supprimer)</option>
+          <option value="read">Lecture seule — voir et télécharger</option>
         </select>
         <button class="btn-primary" style="margin-top:14px;width:100%" onclick="addPermission()">➕ Ajouter l'accès</button>
         <div id="perm-add-status" style="margin-top:8px;font-size:13px;text-align:center"></div>
@@ -1118,16 +1120,23 @@ function buildPermRow(initials, name, email, role, permId) {
 
 async function addPermission() {
   const email = document.getElementById('perm-add-email').value.trim();
-  const sel = document.getElementById('perm-add-role') || document.getElementById('perm-add-group');
+  const sel = document.getElementById('perm-add-role');
   const role = sel ? sel.value : 'read';
   if (!email) { alert('Veuillez saisir un email.'); return; }
   const btn = document.querySelector('#perm-tab-add .btn-primary');
   btn.textContent = 'Ajout en cours...'; btn.disabled = true;
+
+  // Mapping NovaDoc → rôles Graph API
+  const graphRole = role === 'owner' ? 'owner'
+                  : role === 'write' ? 'write'
+                  : role === 'contribute' ? 'write'  // Graph n'a pas "contribute" natif → write sans supprimer géré par SP
+                  : 'read';
+
   try {
     await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/invite', 'POST', {
       requireSignIn: true,
       sendInvitation: false,
-      roles: [role === 'write' ? 'write' : 'read'],
+      roles: [graphRole],
       recipients: [{ email }]
     });
     document.getElementById('perm-add-email').value = '';
@@ -1208,12 +1217,17 @@ function roleBadgeColor(r) {
 
 
 function updateRoleDesc() {
-  const sel = document.getElementById('perm-add-role') || document.getElementById('perm-add-group');
+  const sel = document.getElementById('perm-add-role');
   const desc = document.getElementById('perm-role-desc');
   if (!sel || !desc) return;
-  const descs = { write: { text: 'Peut lire, modifier et supprimer des documents', color: '#2980b9' }, read: { text: 'Peut lire et télécharger les documents (lecture seule)', color: '#27ae60' } };
+  const descs = {
+    owner:      { text: 'Contrôle total : gérer les droits, créer, modifier, supprimer', color: '#e67e22' },
+    write:      { text: 'Modification : créer, modifier et supprimer des éléments', color: '#2980b9' },
+    contribute: { text: 'Collaboration : créer et modifier, mais pas supprimer', color: '#8e44ad' },
+    read:       { text: 'Lecture seule : voir et télécharger uniquement', color: '#27ae60' }
+  };
   const d = descs[sel.value];
-  if (d) { desc.textContent = d.text; desc.style.borderLeft = '3px solid '+d.color; desc.style.paddingLeft = '10px'; }
+  if (d) { desc.textContent = d.text; desc.style.borderLeft = '3px solid '+d.color; desc.style.paddingLeft = '10px'; desc.style.color = 'var(--text-muted)'; desc.style.fontSize = '12px'; desc.style.marginTop = '6px'; }
 }
 
 async function createShareLink(type) {
