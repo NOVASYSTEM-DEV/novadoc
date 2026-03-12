@@ -293,17 +293,11 @@
         <label class="modal-label">Email (compte Microsoft)</label>
         <input type="text" id="perm-add-email" class="modal-input" placeholder="prenom.nom@domaine.com">
         <label class="modal-label" style="margin-top:12px">Niveau d'accès</label>
-        <select id="perm-add-group" class="modal-input">
-          <option value="30">Affichage seul</option>
-          <option value="29">Lecture</option>
-          <option value="28" selected>Collaboration</option>
-          <option value="27">Modification</option>
-          <option value="26">Contrôle total</option>
+        <select id="perm-add-role" class="modal-input">
+          <option value="read">Lecture seule</option>
+          <option value="write" selected>Modification</option>
         </select>
-        <div id="perm-role-desc" style="font-size:12px;color:var(--text-muted);margin-top:6px;padding:8px;background:var(--bg-secondary);border-radius:6px">
-          Peut ajouter et modifier des documents
-        </div>
-        <button class="btn-primary" style="margin-top:14px;width:100%" onclick="addPermission()">➕ Ajouter au groupe</button>
+        <button class="btn-primary" style="margin-top:14px;width:100%" onclick="addPermission()">➕ Ajouter l'accès</button>
         <div id="perm-add-status" style="margin-top:8px;font-size:13px;text-align:center"></div>
       </div>
       <!-- Tab lien -->
@@ -449,8 +443,6 @@
 const TENANT_ID  = '4a733ac3-5d70-484a-bf59-1e0e5991c368';
 const CLIENT_ID  = 'b4a11b8b-6e89-4c43-8dd4-ff33cb9cf32a';
 const SITE_URL   = 'https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL';
-const SP_SITE_URL = SITE_URL;
-const NOVADOC_PERM_LIST = '1b30db07-54f3-4c8b-a672-78f26e49bdc2';
 const APP_URL    = 'https://black-wave-0a6da5a10.4.azurestaticapps.net';
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 const SP_DOC_BASE = 'https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/Documents';
@@ -459,7 +451,7 @@ const msalConfig = {
   auth: { clientId: CLIENT_ID, authority: `https://login.microsoftonline.com/${TENANT_ID}`, redirectUri: window.location.origin },
   cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
 };
-const scopes = ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'User.Read', 'Mail.Send', 'https://novasystemfr.sharepoint.com/AllSites.FullControl'];
+const scopes = ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'User.Read', 'Mail.Send'];
 
 let msalInstance;
 async function initMsal() {
@@ -470,9 +462,6 @@ async function initMsal() {
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let currentDriveId = null;
 let currentPath = [];
-let currentFolderViewOnly = false;
-let currentFolderReadOnly = false;
-let currentFolderCanDelete = false;
 let currentView = 'grid';
 let isContributor = false;
 let ctxTarget = null;
@@ -504,27 +493,7 @@ async function getToken() {
 
 let currentUserEmail = '';
 let currentUserName = '';
-let currentUserIsOwner = false;
-let spDocumentsListId = null; // ID SP de la bibliothèque Documents
-let userPermissions = []; // [{folderId, level}] chargé au login
-let userPermFolderIds = new Set(); // IDs directs autorisés
-let userTransitIds = new Set(); // IDs parents à traverser (chargés depuis FolderPath)
 
-async function checkUserIsOwner() {
-  if (!currentDriveId) return;
-  try {
-    const data = await graphCall('/drives/'+currentDriveId+'/root/permissions');
-    const perms = data.value || [];
-    currentUserIsOwner = perms.some(p => {
-      const user = (p.grantedTo && p.grantedTo.user) || (p.grantedToV2 && p.grantedToV2.user) || {};
-      const email = (user.email||'').toLowerCase();
-      const name = (user.displayName||'').toLowerCase();
-      return (email === currentUserEmail || name === currentUserName) && p.roles && p.roles.includes('owner');
-    });
-  } catch(e) {
-    currentUserIsOwner = false; // 403 = pas owner
-  }
-}
 
 async function afterLogin(account) {
   await getToken();
@@ -537,83 +506,10 @@ async function afterLogin(account) {
   document.getElementById('login-screen').style.display = 'none';
   isContributor = true;
   document.querySelectorAll('.contributor-only').forEach(el => el.style.display = '');
-  // Charger les permissions AVANT de naviguer, owner après le drive
-  await loadUserPermissions();
   await loadSiteAndDrive();
-  await checkUserIsOwner();
 }
 
-async function loadUserPermissions() {
-  if (currentUserIsOwner) { userPermissions = null; return; }
-  try {
-    const token = await getSpToken();
-    const h = { Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' };
-    const filter = encodeURIComponent(`UserEmail eq '${currentUserEmail}'`);
-    const r = await fetch(`${SP_SITE_URL}/_api/web/lists(guid'${NOVADOC_PERM_LIST}')/items?$filter=${filter}&$select=FolderId,FolderPath,Level&$top=500`, { headers:h });
-    if (!r.ok) { userPermissions = []; return; }
-    const d = await r.json();
-    userPermissions = (d.d && d.d.results) || [];
-    console.log('[NovaDoc] userPermissions chargé:', userPermissions.length, userPermissions.map(p=>p.FolderPath+'='+p.Level));
-    // Construire les sets d'accès
-    userPermFolderIds = new Set(userPermissions.map(p => p.FolderId));
-    // Pour chaque chemin autorisé, marquer tous les dossiers parents comme traversables
-    // FolderPath ex: "Documents/SIEGE/COMPTABILITE" → parents: "Documents", "Documents/SIEGE"
-    userTransitIds = new Set();
-    userPermissions.forEach(p => {
-      if (!p.FolderPath) return;
-      const parts = p.FolderPath.split('/');
-      // Exclure le premier segment "Documents" pour matcher avec currentPath
-      p._pathParts = parts[0] === 'Documents' ? parts.slice(1) : parts;
-    });
-  } catch { userPermissions = []; userPermFolderIds = new Set(); userTransitIds = new Set(); }
-}
 
-function userCanAccessFolder(folderId, folderName, overridePath) {
-  if (currentUserIsOwner || userPermissions === null) return true;
-  if (!userPermissions.length) return false;
-  // Accès direct sur ce dossier
-  if (userPermFolderIds.has(folderId)) return true;
-  // Accès via un dossier parent déjà dans currentPath
-  const activePath = overridePath !== undefined ? overridePath : currentPath;
-  // Transit : vérifier si ce dossier apparaît dans le chemin d'une permission
-  const currentNames = activePath.map(p => p.name);
-  const pathToCheck = folderName ? [...currentNames, folderName] : currentNames;
-  console.log('[NovaDoc] userCanAccessFolder check transit:', pathToCheck, userPermissions.map(p=>p.FolderPath));
-  for (const p of userPermissions) {
-    if (!p._pathParts) continue;
-    const permParts = p._pathParts; // Ignorer "Documents" racine
-    const match = pathToCheck.every((name, i) => permParts[i] && permParts[i].toUpperCase() === name.toUpperCase());
-    console.log('[NovaDoc] comparing', pathToCheck, 'vs', permParts, '→', match);
-    if (match) return true;
-  }
-  return false;
-}
-function userCanNavigate(folderId, folderName) {
-  return true;
-}
-function userCanAccessFolderFromRoot(folderId, folderName, ancestorPath) {
-  if (currentUserIsOwner || userPermissions === null) return true;
-  if (!userPermissions.length) return false;
-  if (userPermFolderIds.has(folderId)) return true;
-  for (const seg of (ancestorPath||[])) {
-    if (userPermFolderIds.has(seg.id)) return true;
-  }
-  const pathToCheck = [...(ancestorPath||[]).map(p=>p.name), folderName];
-  for (const p of userPermissions) {
-    if (!p._pathParts) continue;
-    const match = pathToCheck.every((name, i) => p._pathParts[i] && p._pathParts[i].toUpperCase() === name.toUpperCase());
-    if (match) return true;
-  }
-  return false;
-}
-function userHasDirectAccess(folderId) {
-  if (currentUserIsOwner || userPermissions === null) return true;
-  if (userPermFolderIds.has(folderId)) return true;
-  for (const seg of currentPath) {
-    if (userPermFolderIds.has(seg.id)) return true;
-  }
-  return false;
-}
 
 function doLogout() {
   if (!confirm('Se déconnecter ?')) return;
@@ -639,16 +535,6 @@ async function loadSiteAndDrive() {
     const site = await graphCall('/sites/novasystemfr.sharepoint.com:/sites/TESTSHAREPOINTEXCEL');
     const drive = await graphCall(`/sites/${site.id}/drive`);
     currentDriveId = drive.id;
-    // Récupérer l'ID SP de la bibliothèque Documents
-    try {
-      const token = await getSpToken();
-      const r = await fetch(SP_SITE_URL+"/_api/web/lists/getbytitle('Documents')?$select=Id", {
-        headers:{ Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' }
-      });
-      const d = await r.json();
-      spDocumentsListId = d.d && d.d.Id;
-      console.log('[NovaDoc] spDocumentsListId:', spDocumentsListId);
-    } catch(e) { console.warn('Impossible de charger listId Documents:', e.message); }
     await navigateTo([]);
     await loadTree();
   } catch(e) { showError(e.message); }
@@ -698,59 +584,7 @@ async function loadCurrentFolder(filter='') {
     const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length-1].id;
     const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
-    console.log('[NovaDoc] items dans dossier:', folderId, items.map(i=>i.name));
-
-    // Déterminer le niveau NOVADOC depuis userPermissions (déjà chargé au login)
-    currentFolderViewOnly = false;
-    currentFolderReadOnly = false;
-    currentFolderCanDelete = false;
-    if (!currentUserIsOwner) {
-      // Chercher le niveau le plus précis : dossier courant d'abord, puis parents
-      let level = null;
-      const entry = (userPermissions || []).find(p => p.FolderId === folderId);
-      if (entry) { level = entry.Level; }
-      console.log('[NovaDoc] niveau détecté pour dossier:', folderId, 'level=', level);
-      if (level === 26 || level === 27) {
-        currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = true;
-      } else if (level === 28) {
-        currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = false;
-      } else if (level === 29) {
-        currentFolderViewOnly = false; currentFolderReadOnly = true; currentFolderCanDelete = false;
-      } else if (level === 30) {
-        currentFolderViewOnly = true; currentFolderReadOnly = false; currentFolderCanDelete = false;
-     } else {
-        currentFolderViewOnly = false; currentFolderReadOnly = false; currentFolderCanDelete = false;
-      }
-     }
-    // Vérifier les permissions d'écriture sur les dossiers en parallèle
-    const folders = items.filter(i => i.folder);
-    await Promise.all(folders.map(async folder => {
-      try {
-        const perms = await graphCall(`/drives/${currentDriveId}/items/${folder.id}/permissions`);
-        const myPerms = (perms.value||[]).find(p => {
-          const u = (p.grantedTo&&p.grantedTo.user)||(p.grantedToV2&&p.grantedToV2.user)||{};
-          const email = (u.email||'').toLowerCase();
-          const name = (u.displayName||'').toLowerCase();
-          return email === currentUserEmail || name === currentUserName;
-        });
-        const roles = (myPerms && myPerms.roles) ? myPerms.roles.map(r=>r.toLowerCase()) : [];
-        folder._canWrite = currentUserIsOwner || roles.some(r => ['write','owner','sp.full control','sp.contribute','sp.modification','sp.collaboration'].includes(r));
-        folder._canRead  = folder._canWrite || roles.some(r => ['read','sp.lecture','sp.read'].includes(r));
-        folder._viewOnly = !folder._canWrite && !folder._canRead;
-      } catch {
-        folder._canWrite = currentUserIsOwner; // si pas de permissions explicites, se base sur owner
-      }
-    }));
-     const visibleItems = currentUserIsOwner ? items : items.filter(i => {
-      if (!i.folder) return true;
-      if (userPermFolderIds.has(i.id)) return true;
-      if (currentPath.some(p => {
-        const e = (userPermissions||[]).find(x => x.FolderId === p.id);
-        return e && e.Level <= 28;
-      })) return true;
-      return false;
-    });
-	renderContent(visibleItems);
+    renderContent(items);
     const foldersCount = items.filter(i=>i.folder).length, files = items.filter(i=>i.file);
     document.getElementById('status-count').textContent = `${foldersCount} dossier(s) · ${files.length} fichier(s)`;
     document.getElementById('status-path').textContent = ['Documents',...currentPath.map(p=>p.name)].join(' › ');
@@ -771,7 +605,7 @@ async function loadTree(forceReload=false) {
 
 function buildTreeNodes(items, container, depth, ancestorPath) {
   ancestorPath = ancestorPath || [];
-  items.filter(i => i.folder && (currentUserIsOwner || userCanAccessFolderFromRoot(i.id, i.name, ancestorPath))).forEach(item => {
+  items.filter(i => i.folder).forEach(item => {
     const wrapper = document.createElement('div');
 
     // Ligne principale du noeud
@@ -813,10 +647,6 @@ function buildTreeNodes(items, container, depth, ancestorPath) {
     // ── FLÈCHE : déplier / replier ──────────────────────────────────────
     toggleBtn.addEventListener('click', async e => {
       e.stopPropagation();
-      if (!userCanNavigate(item.id)) {
-        showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+item.name+'".');
-        return;
-      }
       await loadChildren();
       const open = childContainer.classList.toggle('open');
       toggleBtn.classList.toggle('open', open);
@@ -825,10 +655,6 @@ function buildTreeNodes(items, container, depth, ancestorPath) {
     // ── LABEL : naviguer dans le dossier ───────────────────────────────
     label.addEventListener('click', async e => {
       e.stopPropagation();
-      if (!userCanNavigate(item.id, item.name)) {
-        showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+item.name+'".');
-        return;
-      }
       await navigateTo(buildPathTo(item));
       // Ouvrir sans refermer
       await loadChildren();
@@ -938,7 +764,7 @@ function getItemData(item) {
 function gridItemHTML(item) {
   const { isFolder, parentPath, createdBy } = getItemData(item);
   const ext = isFolder ? '' : (item.name.split('.').pop()||'').toLowerCase();
-  const folderColor = isFolder ? (item._canWrite ? '#27ae60' : '#f5a623') : '';
+  const folderColor = isFolder ? '#f5a623' : '';
   const icon = isFolder ? folderIcon(52, folderColor) : fileIcon(ext, 52);
   return `<div class="grid-item" draggable="true"
     data-id="${item.id}" data-name="${item.name}"
@@ -954,7 +780,7 @@ function gridItemHTML(item) {
 function listItemHTML(item) {
   const { isFolder, parentPath, createdBy } = getItemData(item);
   const ext = isFolder ? '' : (item.name.split('.').pop()||'').toLowerCase();
-  const folderColor = isFolder ? (item._canWrite ? '#27ae60' : '#f5a623') : '';
+  const folderColor = isFolder ? '#f5a623' : '';
   const icon = isFolder ? folderIconSmall(folderColor) : fileIconSmall(ext);
   const date = item.lastModifiedDateTime ? new Date(item.lastModifiedDateTime).toLocaleDateString('fr-FR') : '—';
   const size = isFolder ? '—' : formatSize(item.size);
@@ -995,17 +821,9 @@ function attachItemEvents(content, items) {
       const { id, name, type, url } = el.dataset;
       clearSelection();
       if (type==='folder') {
-        if (!userCanNavigate(id, name)) {
-          showInfoModal('🔒', 'Accès refusé', 'Vous n\'avez pas les droits pour accéder au dossier "'+name+'".');
-          return;
-        }
         navigateTo([...currentPath, {id, name}]);
       }
       else {
-        if (currentFolderViewOnly) {
-          showInfoModal('🔒', 'Accès refusé', 'Vous avez uniquement le droit de voir la liste des fichiers dans ce dossier.');
-          return;
-        }
         openFileLocal(name, url, el.dataset.parentPath, id);
       }
     });
@@ -1014,15 +832,10 @@ function attachItemEvents(content, items) {
       e.preventDefault();
       const { id, name, type, url } = el.dataset;
       ctxTarget = { id, name, type, url, parentPath: el.dataset.parentPath, createdBy: el.dataset.createdBy||'' };
-    // isCreator : doit avoir un email ET correspondre à l'utilisateur connecté
-    const createdByLower = (ctxTarget.createdBy||'').toLowerCase();
-    const isCreator = createdByLower && (createdByLower === currentUserEmail || createdByLower === currentUserName);
-    const deleteBtn = document.getElementById('ctx-delete');
-    const permBtn = document.getElementById('ctx-permissions');
-    // Afficher si créateur OU contrôle total
-    const canManage = isCreator || currentUserIsOwner;
-    if (deleteBtn) deleteBtn.style.display = canManage ? '' : 'none';
-    if (permBtn) permBtn.style.display = canManage ? '' : 'none';
+      const deleteBtn = document.getElementById('ctx-delete');
+      const permBtn = document.getElementById('ctx-permissions');
+      if (deleteBtn) deleteBtn.style.display = '';
+      if (permBtn) permBtn.style.display = '';
       // Si item pas dans sélection, reset sélection
       if (!selectedItems.find(s=>s.id===id)) clearSelection();
       showCtxMenu(e, type);
@@ -1063,11 +876,6 @@ function openFileReadOnly(url) {
 }
 
 function openFileLocal(name, url, parentPath, itemId) {
-  // Si lecture seule (pas affichage seul) → Office Online en lecture
-  if (currentFolderReadOnly) {
-    openFileReadOnly(url);
-    return;
-  }
   const ext = name.split('.').pop().toLowerCase();
   const protocols = {
     doc:'ms-word', docx:'ms-word', docm:'ms-word',
@@ -1091,16 +899,15 @@ function openFileLocal(name, url, parentPath, itemId) {
 function showCtxMenu(e, type) {
   const menu = document.getElementById('ctx-menu');
   const isFile = type === 'file';
-  document.getElementById('ctx-open-local').style.display = isFile && !currentFolderViewOnly ? '' : 'none';
-  document.getElementById('ctx-download').style.display = isFile && !currentFolderViewOnly ? '' : 'none';
+  document.getElementById('ctx-open-local').style.display = isFile ? '' : 'none';
+  document.getElementById('ctx-download').style.display = isFile ? '' : 'none';
   // Versions disponibles pour fichiers seulement
   const versionsEl = document.getElementById('ctx-versions');
   const sepDelEl = document.getElementById('ctx-sep-del');
   const deleteEl = document.getElementById('ctx-delete');
-  if (versionsEl) versionsEl.style.display = isContributor && type==='file' ? '' : 'none';
-  if (sepDelEl) sepDelEl.style.display = isContributor ? '' : 'none';
-  // Suppression: visible si contributeur
-  if (deleteEl) deleteEl.style.display = isContributor ? '' : 'none';
+  if (versionsEl) versionsEl.style.display = type==='file' ? '' : 'none';
+  if (sepDelEl) sepDelEl.style.display = '';
+  if (deleteEl) deleteEl.style.display = '';
   menu.style.display = 'block';
   const x = Math.min(e.clientX, window.innerWidth-220);
   const y = Math.min(e.clientY, window.innerHeight-300);
@@ -1117,7 +924,6 @@ document.addEventListener('keydown', e => {
 });
 
 function ctxOpenLocal() {
-  if (currentFolderViewOnly) { showInfoModal('🔒', 'Accès refusé', 'Vous avez uniquement le droit de voir la liste des fichiers dans ce dossier.'); return; }
   if(ctxTarget) openFileLocal(ctxTarget.name, ctxTarget.url, ctxTarget.parentPath, ctxTarget.id);
 }
 
@@ -1187,17 +993,11 @@ async function ctxVersions() {
 
 async function ctxDelete() {
   if (!ctxTarget) return;
-  const createdByLower = (ctxTarget.createdBy||'').toLowerCase();
-  const isCreator = createdByLower && (createdByLower === currentUserEmail || createdByLower === currentUserName);
-  if (!isCreator && !currentUserIsOwner && !currentFolderCanDelete) {
-    alert('Vous ne pouvez pas supprimer cet élément car vous n\'en êtes pas le créateur.');
-    return;
-  }
   if (!confirm(`Supprimer "${ctxTarget.name}" ?\n\nL'élément sera récupérable pendant 30 jours par l'administrateur.`)) return;
   try {
     await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}`, 'DELETE');
     await loadCurrentFolder();
-  } catch(e) { alert('Erreur suppression: '+e.message); }
+  } catch(e) { alert(permissionErrorMsg(e)); }
 }
 
 // ─── PARTAGE ──────────────────────────────────────────────────────────────────
@@ -1206,6 +1006,45 @@ function ctxShare() {
 }
 
 // ─── GESTION DES PERMISSIONS ─────────────────────────────────────────────────
+
+// ─── Charger les permissions Graph du dossier ─────────────────────────────────
+async function loadPermissions() {
+  const list = document.getElementById('perm-members-list');
+  list.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
+  if (!ctxTarget) { list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Sélectionnez un élément</div>'; return; }
+  try {
+    const data = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions');
+    const perms = (data.value || []).filter(p => p.grantedTo || p.grantedToV2);
+    if (!perms.length) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">Aucune permission explicite (héritage SharePoint actif)</div>';
+      return;
+    }
+    let html = '';
+    perms.forEach(p => {
+      const user = (p.grantedTo && p.grantedTo.user) || (p.grantedToV2 && p.grantedToV2.user) || {};
+      const name = user.displayName || user.email || 'Utilisateur inconnu';
+      const email = user.email || '';
+      const initials = name.substring(0,2).toUpperCase();
+      const role = simplifyRole(p.roles);
+      const label = roleLabel(role);
+      const color = roleBadgeColor(role);
+      html += '<div class="perm-member-row">';
+      html += '<div class="perm-avatar">'+initials+'</div>';
+      html += '<div class="perm-member-info"><div class="perm-member-name">'+name+'</div><div class="perm-member-email">'+email+'</div></div>';
+      html += '<span style="font-size:11px;padding:3px 8px;border-radius:10px;background:'+color+';color:white">'+label+'</span>';
+      html += '<button class="perm-remove-btn" onclick="removePermission(''+p.id+'')" title="Retirer">✕</button>';
+      html += '</div>';
+    });
+    list.innerHTML = html;
+  } catch(e) {
+    if (e.message.includes('403') || e.message.includes('401')) {
+      list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Les permissions sont héritées de SharePoint.<br>Gérez-les directement dans l'interface SharePoint.</div>';
+    } else {
+      list.innerHTML = '<div style="color:#e74c3c;padding:16px">Erreur: '+e.message+'</div>';
+    }
+  }
+}
+
 async function showPermissionsModal() {
   if (!ctxTarget) return;
   document.getElementById('perm-title').textContent = ctxTarget.name;
@@ -1236,30 +1075,6 @@ function switchPermTab(tab) {
   if (tab === 'add') updateRoleDesc();
 }
 
-const SP_GROUPS = [
-  { id: 26, label: 'Contrôle Total',  name: 'NOVADOC-ControleTotal',  color: '#c0392b' },
-  { id: 27, label: 'Modification',    name: 'NOVADOC-Modification',   color: '#2980b9' },
-  { id: 28, label: 'Collaboration',   name: 'NOVADOC-Collaboration',  color: '#27ae60' },
-  { id: 29, label: 'Lecture',         name: 'NOVADOC-Lecture',        color: '#7f8c8d' },
-  { id: 30, label: 'Affichage Seul',  name: 'NOVADOC-AffichageSeul',  color: '#95a5a6' },
-];
-
-const SP_GROUP_DESCS = {
-  26: { text: 'Contrôle total sur le site — peut tout faire', color: '#c0392b' },
-  27: { text: 'Peut ajouter, modifier et supprimer des documents', color: '#2980b9' },
-  28: { text: 'Peut ajouter et modifier des documents (sans suppression)', color: '#27ae60' },
-  29: { text: 'Peut lire et télécharger les documents', color: '#7f8c8d' },
-  30: { text: 'Peut consulter sans télécharger', color: '#95a5a6' },
-};
-
-function updateRoleDesc() {
-  const sel = document.getElementById('perm-add-role');
-  const desc = document.getElementById('perm-role-desc');
-  if (!sel || !desc) return;
-  const d = SP_GROUP_DESCS[parseInt(sel.value)];
-  if (d) { desc.textContent = d.text; desc.style.borderLeft = '3px solid '+d.color; desc.style.paddingLeft = '10px'; }
-}
-
 
 // Convertir les rôles Graph en 3 niveaux simplifiés
 function simplifyRole(roles) {
@@ -1282,214 +1097,84 @@ function roleBadgeColor(r) {
   return '#27ae60';
 }
 
-// ─── Helpers REST SharePoint avec token MSAL ─────────────────────────────────
-async function getSpToken() {
-  const accounts = msalInstance.getAllAccounts();
-  if (!accounts.length) return null;
-  try {
-    const r = await msalInstance.acquireTokenSilent({
-      scopes: ['https://novasystemfr.sharepoint.com/AllSites.FullControl'],
-      account: accounts[0]
-    });
-    return r.accessToken;
-  } catch {
-    const r = await msalInstance.acquireTokenPopup({
-      scopes: ['https://novasystemfr.sharepoint.com/AllSites.FullControl'],
-      account: accounts[0]
-    });
-    return r.accessToken;
-  }
-}
-async function spGetDigest(token) {
-  const r = await fetch(SP_SITE_URL+'/_api/contextinfo', { method:'POST', headers:{ Authorization:'Bearer '+token, Accept:'application/json;odata=verbose', 'Content-Type':'application/json;odata=verbose' }});
-  if (!r.ok) throw new Error('contextinfo HTTP '+r.status);
-  const text = await r.text();
-  if (!text || text.trim() === '') throw new Error('contextinfo réponse vide');
-  const d = JSON.parse(text);
-  return d.d.GetContextWebInformation.FormDigestValue;
-}
-async function spRestGet(url) {
-  const token = await getSpToken();
-  const res = await fetch(url, { headers: { Authorization: 'Bearer '+token, Accept: 'application/json;odata=verbose' } });
-  if (!res.ok) throw new Error('SP REST '+res.status);
-  return res.json();
-}
-async function spRestPost(url, body) {
-  const token = await getSpToken();
-  const digest = await spGetDigest(token);
-  const h = { Authorization:'Bearer '+token, Accept:'application/json;odata=verbose', 'Content-Type':'application/json;odata=verbose', 'X-RequestDigest': digest };
-  const res = await fetch(url, { method:'POST', headers:h, body: body ? JSON.stringify(body) : undefined });
-  if (!res.ok) { const t = await res.text(); throw new Error('SP REST '+res.status+' '+t.substring(0,300)); }
-  return res.status === 204 ? null : res.json();
+
+
+
+
+function updateRoleDesc() {
+  const sel = document.getElementById('perm-add-role') || document.getElementById('perm-add-group');
+  const desc = document.getElementById('perm-role-desc');
+  if (!sel || !desc) return;
+  const descs = { write: { text: 'Peut lire, modifier et supprimer des documents', color: '#2980b9' }, read: { text: 'Peut lire et télécharger les documents (lecture seule)', color: '#27ae60' } };
+  const d = descs[sel.value];
+  if (d) { desc.textContent = d.text; desc.style.borderLeft = '3px solid '+d.color; desc.style.paddingLeft = '10px'; }
 }
 
-// ─── Charger membres des groupes NOVADOC ─────────────────────────────────────
+function switchPermTab(tab) {
+  ['members','add','link'].forEach(t => {
+    document.getElementById('perm-tab-'+t).style.display = t === tab ? '' : 'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t === tab);
+  });
+  if (tab === 'add') updateRoleDesc();
+}
+
+// ─── Permissions Graph natif ──────────────────────────────────────────────────
 async function loadPermissions() {
   const list = document.getElementById('perm-members-list');
   list.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
-  const folderId = ctxTarget ? ctxTarget.id : 'root';
   try {
-    const token = await getSpToken();
-    const h = { Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' };
-    const filter = encodeURIComponent(`FolderId eq '${folderId}'`);
-    const r = await fetch(`${SP_SITE_URL}/_api/web/lists(guid'${NOVADOC_PERM_LIST}')/items?$filter=${filter}&$select=Id,UserEmail,Level&$top=100`, { headers:h });
-    const d = await r.json();
-    const items = (d.d && d.d.results) || [];
-
-    // Grouper par niveau
-    const byLevel = {};
-    SP_GROUPS.forEach(g => byLevel[g.id] = { group: g, entries: [] });
-    items.forEach(item => { if (byLevel[item.Level]) byLevel[item.Level].entries.push(item); });
-
+    const data = await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}/permissions`);
+    const perms = (data.value||[]).filter(p => p.grantedTo || p.grantedToV2);
+    if (!perms.length) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">Aucune permission explicite — héritage SharePoint</div>';
+      return;
+    }
     let html = '';
-    SP_GROUPS.forEach(g => {
-      const { group, entries } = byLevel[g.id];
-      html += '<div style="margin-bottom:16px">';
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);margin-bottom:8px">';
-      html += '<span style="background:'+group.color+';color:white;font-size:11px;font-weight:600;padding:3px 10px;border-radius:10px">'+group.label+'</span>';
-      html += '<button onclick="novadocSetGroup('+group.id+')" style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:white;cursor:pointer;color:var(--accent)">+ Ajouter</button>';
-      html += '</div>';
-      if (!entries.length) {
-        html += '<div style="font-size:12px;color:var(--text-muted);padding:4px 0;font-style:italic">Aucun membre</div>';
-      } else {
-        entries.forEach(entry => {
-          const email = entry.UserEmail || '';
-          const initials = email.split('@')[0].substring(0,2).toUpperCase();
-          const safeEmail = email.replace(/[&<>"']/g,'');
-          const safeLabel = group.label.replace(/[&<>"']/g,'');
-          html += '<div class="perm-member-row" style="padding:6px 0">';
-          html += '<div class="perm-avatar" style="width:28px;height:28px;font-size:10px">'+initials+'</div>';
-          html += '<div class="perm-member-info"><div class="perm-member-name">'+email+'</div></div>';
-          html += '<button class="perm-remove-btn" onclick="novadocRemovePermission('+entry.Id+',this)" data-name="'+safeEmail+'" data-label="'+safeLabel+'" title="Retirer">✕</button>';
-          html += '</div>';
-        });
-      }
-      html += '</div>';
+    perms.forEach(p => {
+      const user = (p.grantedToV2 && p.grantedToV2.user) || (p.grantedTo && p.grantedTo.user) || {};
+      const name = user.displayName || user.email || 'Utilisateur';
+      const email = user.email || '';
+      const initials = name.substring(0,2).toUpperCase();
+      const role = simplifyRole(p.roles);
+      const color = roleBadgeColor(role);
+      html += `<div class="perm-member-row">
+        <div class="perm-avatar">${initials}</div>
+        <div class="perm-member-info"><div class="perm-member-name">${name}</div><div class="perm-member-email">${email}</div></div>
+        <span style="background:${color};color:white;font-size:11px;font-weight:600;padding:3px 10px;border-radius:10px">${roleLabel(role)}</span>
+        <button class="perm-remove-btn" onclick="removePermission('${p.id}')" title="Retirer">✕</button>
+      </div>`;
     });
-
-    list.innerHTML = html || '<div style="padding:20px;text-align:center;color:var(--text-muted)">Aucune permission sur ce dossier</div>';
+    list.innerHTML = html;
   } catch(e) {
     list.innerHTML = '<div style="color:#e74c3c;padding:16px">Erreur: '+e.message+'</div>';
   }
 }
 
-function novadocSetGroup(groupId) {
-  const sel = document.getElementById('perm-add-group');
-  if (sel) sel.value = groupId;
-  switchPermTab('add');
-  document.getElementById('perm-add-email').focus();
-}
-
-async function novadocRemovePermission(itemId, btn) {
-  const userName = btn.dataset.name || 'cet utilisateur';
-  const groupLabel = btn.dataset.label || '';
-  if (!confirm('Retirer "'+userName+'" du niveau "'+groupLabel+'" ?')) return;
-  try {
-    const token = await getSpToken();
-    const digest = await spGetDigest(token);
-    const h = { Authorization:'Bearer '+token, Accept:'application/json;odata=verbose', 'Content-Type':'application/json;odata=verbose', 'X-RequestDigest':digest, 'X-HTTP-Method':'DELETE', 'If-Match':'*' };
-    const r = await fetch(`${SP_SITE_URL}/_api/web/lists(guid'${NOVADOC_PERM_LIST}')/items(${itemId})`, { method:'POST', headers:h });
-    if (!r.ok) throw new Error('Erreur suppression '+r.status);
-    await loadPermissions();
-  } catch(e) {
-    alert('Erreur suppression: '+e.message);
-  }
-}
-
 async function addPermission() {
   const email = document.getElementById('perm-add-email').value.trim();
-  const groupId = parseInt(document.getElementById('perm-add-group').value);
+  const roleEl = document.getElementById('perm-add-role') || document.getElementById('perm-add-group');
+  const role = roleEl ? roleEl.value : 'read';
   if (!email) { alert('Veuillez saisir un email.'); return; }
-  if (!groupId) { alert('Veuillez choisir un groupe.'); return; }
   const btn = document.querySelector('#perm-tab-add .btn-primary');
   btn.textContent = 'Ajout en cours...'; btn.disabled = true;
   try {
-    // Résoudre l'utilisateur puis l'ajouter au groupe SP
-    const token = await getSpToken();
-    const digest = await spGetDigest(token);
-    const h = { Authorization:'Bearer '+token, Accept:'application/json;odata=verbose', 'Content-Type':'application/json;odata=verbose', 'X-RequestDigest': digest };
-
-    // Ensure user
-    const euRes = await fetch(SP_SITE_URL+'/_api/web/ensureuser', { method:'POST', headers:h, body: JSON.stringify({ logonName: 'i:0#.f|membership|'+email }) });
-    if (!euRes.ok) throw new Error('Utilisateur introuvable ('+email+')');
-    const euData = await euRes.json();
-    const userId = euData.d ? euData.d.Id : null;
-    if (!userId) throw new Error('ID utilisateur non trouvé');
-
-    // Vérifier si une entrée existe déjà pour cet utilisateur sur ce dossier
-    const folderId = ctxTarget ? ctxTarget.id : 'root';
-    const folderPath = ['Documents', ...currentPath.map(p=>p.name), ctxTarget ? ctxTarget.name : ''].filter(Boolean).join('/');
-    const filterExist = encodeURIComponent(`FolderId eq '${folderId}' and UserEmail eq '${email}'`);
-    const existRes = await fetch(`${SP_SITE_URL}/_api/web/lists(guid'${NOVADOC_PERM_LIST}')/items?$filter=${filterExist}&$select=Id&$top=1`, { headers:h });
-    const existData = await existRes.json();
-    const existItems = (existData.d && existData.d.results) || [];
-
-    if (existItems.length > 0) {
-      // Mettre à jour l'entrée existante
-      const itemId = existItems[0].Id;
-      const updRes = await fetch(`${SP_SITE_URL}/_api/web/lists(guid'${NOVADOC_PERM_LIST}')/items(${itemId})`, {
-        method: 'POST',
-        headers: { ...h, 'X-HTTP-Method': 'MERGE', 'If-Match': '*' },
-        body: JSON.stringify({ '__metadata': { type: 'SP.Data.NovaDocPermissionsListItem' }, Level: groupId })
-      });
-      if (!updRes.ok) { const t = await updRes.text(); throw new Error('Erreur mise à jour: '+t.substring(0,200)); }
-    } else {
-      // Créer une nouvelle entrée
-      const addRes = await fetch(`${SP_SITE_URL}/_api/web/lists(guid'${NOVADOC_PERM_LIST}')/items`, {
-        method: 'POST', headers: h,
-        body: JSON.stringify({ '__metadata': { type: 'SP.Data.NovaDocPermissionsListItem' }, FolderId: folderId, FolderPath: folderPath, UserEmail: email, Level: groupId })
-      });
-      if (!addRes.ok) { const t = await addRes.text(); throw new Error('Erreur ajout permission: '+t.substring(0,200)); }
-    }
-
-    // Casser l'héritage SP et assigner les droits sur le dossier
-    // → permet à Graph de retourner le dossier pour ce user
-    if (ctxTarget && ctxTarget.id) {
-      try {
-        const itemData = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'?$select=id,sharepointIds');
-        const listItemId = itemData.sharepointIds && itemData.sharepointIds.listItemId;
-        const listId = spDocumentsListId || (itemData.sharepointIds && itemData.sharepointIds.listId);
-        if (listItemId && listId) {
-          const folderRelUrl = '/sites/TESTSHAREPOINTEXCEL/Documents' + (currentPath.length ? '/'+currentPath.map(p=>p.name).join('/') : '') + (ctxTarget ? '/'+ctxTarget.name : '');
-			const itemBase = SP_SITE_URL+"/_api/web/GetFolderByServerRelativeUrl('"+folderRelUrl+"')/ListItemAllFields";
-			const breakRes = await fetch(itemBase+'/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)', { method:'POST', headers:h });
-			console.log('[NovaDoc] breakroleinheritance:', breakRes.status);
-			// Assigner le rôle SP correspondant au niveau
-          const roleNameMap = { 26:'Contrôle total', 27:'Modification', 28:'Collaboration', 29:'Lecture', 30:'Affichage seul' };
-          const roleName = roleNameMap[groupId];
-          console.log('[NovaDoc] userId:', userId, 'roleName:', roleName);
-          const rdRes = await fetch(SP_SITE_URL+'/_api/web/roledefinitions', { headers:{ Authorization:'Bearer '+token, Accept:'application/json;odata=verbose' }});
-          const rdData = await rdRes.json();
-          const allRoles = rdData.d.results.map(r=>r.Name);
-          console.log('[NovaDoc] roles disponibles:', allRoles);
-          const roleDef = rdData.d.results.find(r => r.Name === roleName);
-          console.log('[NovaDoc] roleDef trouvé:', roleDef ? roleDef.Id+'/'+roleDef.Name : 'NON TROUVÉ');
-          if (roleDef) {
-            const assignRes = await fetch(SP_SITE_URL+"/_api/web/GetFolderByServerRelativeUrl('"+folderRelUrl+"')/ListItemAllFields/roleassignments/addroleassignment(principalid="+userId+",roledefid="+roleDef.Id+")", { method:'POST', headers:h });
-            console.log('[NovaDoc] addroleassignment:', assignRes.status);
-          }
-        }
-      } catch(eF) { console.error('[NovaDoc] Erreur droits SP dossier:', eF.message, eF); }
-    }
-
+    await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}/invite`, 'POST', {
+      requireSignIn: true, sendInvitation: false,
+      roles: [role === 'write' ? 'write' : 'read'],
+      recipients: [{ email }]
+    });
     document.getElementById('perm-add-email').value = '';
     switchPermTab('members');
     await loadPermissions();
-    alert('✅ '+email+' — accès ajouté sur ce dossier !');
-  } catch(e) {
-    alert('Erreur: '+e.message);
-  } finally {
-    btn.textContent = "Ajouter l'accès"; btn.disabled = false;
-  }
+    alert('✅ '+email+' — accès accordé !');
+  } catch(e) { alert('Erreur: '+e.message); }
+  finally { btn.textContent = "Ajouter l'accès"; btn.disabled = false; }
 }
 
 async function updatePermission(permId, newRole) {
   try {
     await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions/'+permId, 'PATCH', { roles: [newRole] });
-  } catch(e) {
-    alert('Erreur modification: '+e.message);
-    await loadPermissions();
-  }
+  } catch(e) { alert('Erreur modification: '+e.message); await loadPermissions(); }
 }
 
 async function removePermission(permId) {
@@ -1497,11 +1182,8 @@ async function removePermission(permId) {
   try {
     await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions/'+permId, 'DELETE');
     await loadPermissions();
-  } catch(e) {
-    alert('Erreur suppression: '+e.message);
-  }
+  } catch(e) { alert('Erreur suppression: '+e.message); }
 }
-
 
 async function createShareLink(type) {
   try {
@@ -1693,17 +1375,6 @@ async function pasteItems() {
 
 async function selDelete() {
   if (!selectedItems.length) return;
-  if (!currentUserIsOwner && !currentFolderCanDelete) {
-    const notOwned = selectedItems.filter(s => {
-      const el = document.querySelector('[data-id="'+s.id+'"]');
-      const createdBy = (el && el.dataset.createdBy || '').toLowerCase();
-      return createdBy && createdBy !== currentUserEmail && createdBy !== currentUserName;
-    });
-    if (notOwned.length > 0) {
-      alert('Vous ne pouvez pas supprimer ' + notOwned.length + ' élément(s) dont vous n\'êtes pas le créateur :\n' + notOwned.map(s=>s.name).join(', '));
-      return;
-    }
-  }
   if (!confirm(`Supprimer ${selectedItems.length} élément(s) ?\n\nLes éléments seront récupérables pendant 30 jours par l'administrateur.`)) return;
   const toDelete = [...selectedItems];
   clearSelection();
@@ -1715,7 +1386,7 @@ async function selDelete() {
     }
     updateTrashBadge();
     await loadCurrentFolder();
-  } catch(e) { alert('Erreur suppression: ' + e.message); await loadCurrentFolder(); }
+  } catch(e) { alert(permissionErrorMsg(e)); await loadCurrentFolder(); }
 }
 
 // ─── CORBEILLE ────────────────────────────────────────────────────────────────
@@ -1931,44 +1602,12 @@ async function createNew(type) {
   const folderId = currentPath.length===0 ? 'root' : currentPath[currentPath.length-1].id;
   
   if (type==='folder') {
-    if (currentPath.length === 0 && !currentUserIsOwner) {
-      showInfoModal('🔒', 'Accès refusé', 'Seul l\'administrateur peut créer des dossiers à la racine.');
-      return;
-    }
     const name = prompt('Nom du dossier :');
     if (!name) return;
     try {
       await graphCall(`/drives/${currentDriveId}/items/${folderId}/children`, 'POST', {
         name, folder: {}, '@microsoft.graph.conflictBehavior': 'rename'
       });
-
-      // Auto-ownership : break inheritance + Full Control au créateur
-      if (!currentUserIsOwner) {
-        try {
-          const spToken = await getSpToken();
-          const digest = await spGetDigest(spToken);
-          const parentPath = currentPath.length ? '/' + currentPath.map(p => p.name).join('/') : '';
-          const folderRelUrl = `/sites/TESTSHAREPOINTEXCEL/Documents${parentPath}/${name}`;
-          const itemBase = `${SP_SITE_URL}/_api/web/GetFolderByServerRelativeUrl('${encodeURIComponent(folderRelUrl)}')/ListItemAllFields`;
-
-          await fetch(`${itemBase}/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${spToken}`, Accept: 'application/json;odata=verbose', 'X-RequestDigest': digest }
-          });
-
-          const userRes = await fetch(`${SP_SITE_URL}/_api/web/currentuser`, {
-            headers: { Authorization: `Bearer ${spToken}`, Accept: 'application/json;odata=verbose' }
-          });
-          const userData = await userRes.json();
-          const userId = userData.d.Id;
-
-          await fetch(`${itemBase}/roleassignments/addroleassignment(principalid=${userId},roledefid=1073741829)`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${spToken}`, Accept: 'application/json;odata=verbose', 'X-RequestDigest': digest }
-          });
-        } catch(e) { console.warn('[NovaDoc] auto-ownership failed:', e); }
-      }
-
       await loadCurrentFolder();
       await loadTree(true);
     } catch(e) { alert(permissionErrorMsg(e)); }
@@ -2040,7 +1679,6 @@ async function uploadFiles(files) {
 
 // Drag & drop fichiers depuis bureau
 document.addEventListener('dragover', e => {
-  if (!isContributor) return;
   // Seulement si on drag des fichiers externes (pas des items internes)
   if (dragSource) return;
   e.preventDefault();
@@ -2050,7 +1688,7 @@ document.addEventListener('dragleave', e => { if(e.clientX===0&&e.clientY===0) d
 document.addEventListener('drop', e => {
   e.preventDefault();
   document.getElementById('upload-overlay').classList.remove('active');
-  if (!isContributor||dragSource) return;
+  if (dragSource) return;
   uploadFiles(e.dataTransfer.files);
 });
 
