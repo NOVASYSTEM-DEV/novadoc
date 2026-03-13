@@ -553,8 +553,8 @@ async function graphCall(url, method='GET', body=null) {
   const opts = { method, headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(GRAPH_BASE + url, opts);
-  if (method === 'DELETE') return;
-  if (!res.ok) throw new Error(`Graph ${res.status}: ${await res.text()}`);
+	if (!res.ok) throw new Error(`Graph ${res.status}: ${await res.text()}`);
+	if (method === 'DELETE') return;
   if (res.status === 204) return;
   return res.json();
 }
