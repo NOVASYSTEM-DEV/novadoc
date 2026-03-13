@@ -650,9 +650,6 @@ async function loadCurrentFolder(filter='') {
     const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length-1].id;
     const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy,@microsoft.graph.downloadUrl`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
-    // DEBUG — log le premier fichier pour voir tous les champs URL
-    const firstFile = items.find(i => i.file);
-    if (firstFile) console.log('[NovaDoc DEBUG item]', JSON.stringify(firstFile, null, 2));
 
     // Détecter le rôle de l'utilisateur — remonte sur les parents si héritage actif
     try {
@@ -962,16 +959,12 @@ function openFileLocal(name, url, parentPath, itemId) {
   };
   const protocol = protocols[ext];
   if (protocol) {
-    const rootIdx = (parentPath || '').indexOf('root:');
-    const rel = rootIdx >= 0 ? decodeURIComponent((parentPath || '').substring(rootIdx + 5)) : '';
-    const base = SP_DOC_BASE.replace(/\/$/, '');
-    const fileUrl = base + rel + '/' + name;
-    console.log('[NovaDoc] name:', name);
-    console.log('[NovaDoc] parentPath:', parentPath);
-    console.log('[NovaDoc] rel:', rel);
-    console.log('[NovaDoc] SP_DOC_BASE:', SP_DOC_BASE);
-    console.log('[NovaDoc] fileUrl final:', fileUrl);
-    window.open(protocol + ':ofe|u|' + fileUrl, '_self');
+    // Utiliser le webUrl SharePoint avec action=edit → Word ouvre en mode édition
+    const editUrl = (url || '')
+      .replace('action=default', 'action=edit')
+      .replace('action=view', 'action=edit');
+    console.log('[NovaDoc] editUrl:', editUrl);
+    window.open(protocol + ':ofe|u|' + editUrl, '_self');
   } else {
     const editUrl = (url || '').replace('action=default', 'action=edit');
     window.open(editUrl, '_blank');
