@@ -959,7 +959,11 @@ function openFileLocal(name, url, parentPath, itemId) {
   const protocol = protocols[ext];
   if (protocol) {
     // Construire l'URL directe depuis parentPath : /drives/xxx/root:/Dossier/SousDossier
-    window.location.href = protocol + ':ofe|u|' + url;
+    const rel = decodeURIComponent((parentPath || '').split('root:')[1] || '');
+		const directUrl = SP_DOC_BASE + rel + '/' + name;
+		console.log('URL construite:', directUrl);
+		console.log('parentPath brut:', parentPath);
+		window.location.href = protocol + ':ofe|u|' + directUrl;
   } else {
     const editUrl = url.replace('action=default', 'action=edit');
     window.open(editUrl, '_blank');
