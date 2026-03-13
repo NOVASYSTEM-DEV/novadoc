@@ -1156,7 +1156,7 @@ async function addPermission() {
 
   // Mapping NovaDoc → rôles Graph API
   const graphRole = role === 'owner' ? 'owner'
-                : role === 'write' ? 'contribute'
+                : role === 'write' ? 'write'
                 : 'read';
 
   try {
