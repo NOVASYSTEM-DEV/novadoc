@@ -1966,9 +1966,18 @@ async function createNew(type) {
     const name = prompt('Nom du dossier :');
     if (!name) return;
     try {
-      await graphCall(`/drives/${currentDriveId}/items/${folderId}/children`, 'POST', {
+      const newFolder = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children`, 'POST', {
         name, folder: {}, '@microsoft.graph.conflictBehavior': 'rename'
       });
+      if (newFolder && newFolder.id && currentUserEmail) {
+        try {
+          await graphCall(`/drives/${currentDriveId}/items/${newFolder.id}/invite`, 'POST', {
+            requireSignIn: true, sendInvitation: false,
+            roles: ['write'],
+            recipients: [{ email: currentUserEmail }]
+          });
+        } catch(e2) { console.warn('CT créateur dossier:', e2.message); }
+      }
       await loadCurrentFolder();
       await loadTree(true);
     } catch(e) { alert(permissionErrorMsg(e)); }
@@ -2009,6 +2018,16 @@ async function createNew(type) {
       body
     });
     if (!putRes.ok) throw new Error(await putRes.text());
+    const newFile = await putRes.json().catch(()=>null);
+    if (newFile && newFile.id && currentUserEmail) {
+      try {
+        await graphCall(`/drives/${currentDriveId}/items/${newFile.id}/invite`, 'POST', {
+          requireSignIn: true, sendInvitation: false,
+          roles: ['write'],
+          recipients: [{ email: currentUserEmail }]
+        });
+      } catch(e2) { console.warn('CT créateur fichier:', e2.message); }
+    }
     await loadCurrentFolder();
   } catch(e) { hideLoading(); alert(permissionErrorMsg(e)); await loadCurrentFolder(); }
 }
