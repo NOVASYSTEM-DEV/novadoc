@@ -648,8 +648,11 @@ async function loadCurrentFolder(filter='') {
   showLoading();
   try {
     const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length-1].id;
-    const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
+    const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy,@microsoft.graph.downloadUrl`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
+    // DEBUG — log le premier fichier pour voir tous les champs URL
+    const firstFile = items.find(i => i.file);
+    if (firstFile) console.log('[NovaDoc DEBUG item]', JSON.stringify(firstFile, null, 2));
 
     // Détecter le rôle de l'utilisateur — remonte sur les parents si héritage actif
     try {
