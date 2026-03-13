@@ -321,9 +321,10 @@
       </div>
 
     </div>
-    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
-      <button class="btn-secondary" onclick="closePermissionsModal()">Fermer</button>
-    </div>
+    <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center">
+		<a href="https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_layouts/15/newgrp.aspx" target="_blank" class="btn-secondary" style="font-size:12px;padding:5px 12px;text-decoration:none">⚙️ Créer un groupe SP</a>
+		<button class="btn-secondary" onclick="closePermissionsModal()">Fermer</button>
+	</div>
   </div>
 </div>
 
@@ -1293,53 +1294,54 @@ async function loadPermissions() {
   list.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
   if (!ctxTarget) return;
   try {
-    const token = await getToken();
+    const data = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions');
+    const perms = (data.value || []);
     let html = '';
 
-    // Charger les groupes NOVADOC
-    for (const grp of NOVADOC_GROUPS) {
-      const res = await fetch(`${SITE_URL}/_api/web/SiteGroups/GetById(${grp.id})/Users`, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json;odata=verbose' }
-      });
-      const data = await res.json();
-      const users = (data.d && data.d.results) ? data.d.results.filter(u => u.PrincipalType === 1) : [];
-      const count = users.length;
-      html += `<div class="perm-principal-row" data-type="group" data-id="${grp.id}" data-name="${grp.name}" data-role="${grp.role}" onclick="selectPrincipal(this)">
-        <div class="perm-avatar" style="background:${grp.color};width:28px;height:28px;font-size:11px">G</div>
-        <div class="perm-member-info">
-          <div class="perm-member-name">${grp.name}</div>
-          <div class="perm-member-email">${count} membre(s)</div>
-        </div>
-        <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:${grp.color};color:white">${grp.label}</span>
-      </div>`;
-    }
-
-    // Charger les accès directs via Graph
-    const data = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions');
-    const perms = (data.value || []).filter(p => p.grantedToV2 && p.grantedToV2.user);
     perms.forEach(p => {
-      const user = p.grantedToV2.user;
-      const name = user.displayName || user.email || 'Utilisateur';
-      const email = user.email || '';
-      const role = simplifyRole(p.roles);
-      const color = roleBadgeColor(role);
-      const label = roleLabel(role);
-      const initials = name.substring(0,2).toUpperCase();
-      html += `<div class="perm-principal-row" data-type="user" data-id="${p.id}" data-name="${name}" data-role="${role}" data-permid="${p.id}" onclick="selectPrincipal(this)">
-        <div class="perm-avatar" style="background:${color};width:28px;height:28px;font-size:11px">${initials}</div>
-        <div class="perm-member-info">
-          <div class="perm-member-name">${name}</div>
-          <div class="perm-member-email">${email}</div>
-        </div>
-        <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:${color};color:white">${label}</span>
-      </div>`;
+      // Groupes SP
+      const identities = p.grantedToIdentitiesV2 || p.grantedToIdentities || [];
+      if (identities.length) {
+        identities.forEach(ident => {
+          const grp = ident.group || ident.siteGroup || {};
+          const name = grp.displayName || 'Groupe inconnu';
+          const role = simplifyRole(p.roles);
+          const color = roleBadgeColor(role);
+          const label = roleLabel(role);
+          html += `<div class="perm-principal-row" data-type="group" data-id="${p.id}" data-name="${name}" data-role="${role}" data-permid="${p.id}" onclick="selectPrincipal(this)">
+            <div class="perm-avatar" style="background:${color};width:28px;height:28px;font-size:11px">G</div>
+            <div class="perm-member-info">
+              <div class="perm-member-name">${name}</div>
+            </div>
+            <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:${color};color:white">${label}</span>
+          </div>`;
+        });
+        return;
+      }
+      // Users directs
+      const user = (p.grantedToV2 && p.grantedToV2.user) || (p.grantedTo && p.grantedTo.user) || null;
+      if (user) {
+        const name = user.displayName || user.email || 'Utilisateur';
+        const email = user.email || '';
+        const role = simplifyRole(p.roles);
+        const color = roleBadgeColor(role);
+        const label = roleLabel(role);
+        const initials = name.substring(0,2).toUpperCase();
+        html += `<div class="perm-principal-row" data-type="user" data-id="${p.id}" data-name="${name}" data-role="${role}" data-permid="${p.id}" onclick="selectPrincipal(this)">
+          <div class="perm-avatar" style="background:${color};width:28px;height:28px;font-size:11px">${initials}</div>
+          <div class="perm-member-info">
+            <div class="perm-member-name">${name}</div>
+            <div class="perm-member-email">${email}</div>
+          </div>
+          <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:${color};color:white">${label}</span>
+        </div>`;
+      }
     });
 
-    list.innerHTML = html || '<div style="padding:14px;color:var(--text-muted);font-size:13px">Aucun accès configuré</div>';
-    // Ajouter style hover
+    list.innerHTML = html || '<div style="padding:14px;color:var(--text-muted);font-size:13px">Aucun accès explicite configuré</div>';
     list.querySelectorAll('.perm-principal-row').forEach(el => {
       el.style.cssText += 'display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.1s';
-      el.addEventListener('mouseenter', () => el.style.background = 'var(--hover-row)');
+      el.addEventListener('mouseenter', () => { if (!el.classList.contains('selected')) el.style.background = 'var(--hover-row)'; });
       el.addEventListener('mouseleave', () => { if (!el.classList.contains('selected')) el.style.background = ''; });
     });
   } catch(e) {
