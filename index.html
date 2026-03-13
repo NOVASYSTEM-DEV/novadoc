@@ -648,7 +648,7 @@ async function loadCurrentFolder(filter='') {
   showLoading();
   try {
     const folderId = currentPath.length === 0 ? 'root' : currentPath[currentPath.length-1].id;
-    const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy,@microsoft.graph.downloadUrl`);
+    const data = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children?$orderby=name&$select=id,name,folder,file,size,lastModifiedDateTime,webUrl,parentReference,createdBy`);
     const items = (data.value||[]).filter(i => i.name.toLowerCase().includes(filter.toLowerCase()));
 
     // Détecter le rôle de l'utilisateur — remonte sur les parents si héritage actif
@@ -829,8 +829,7 @@ function renderContent(items) {
 
 function getItemData(item) {
   const isFolder = !!item.folder;
-  // Conserver le path complet avec root: pour openFileLocal
-  const parentPath = item.parentReference ? (item.parentReference.path || '') : '';
+  const parentPath = item.parentReference ? (item.parentReference.path||'').replace('/drive/root:','') : '';
   const createdBy = item.createdBy ? (item.createdBy.user ? item.createdBy.user.email || item.createdBy.user.displayName || '' : '') : '';
   return { isFolder, parentPath, createdBy };
 }
@@ -959,14 +958,12 @@ function openFileLocal(name, url, parentPath, itemId) {
   };
   const protocol = protocols[ext];
   if (protocol) {
-    // Utiliser le webUrl SharePoint avec action=edit → Word ouvre en mode édition
-    const editUrl = (url || '')
-      .replace('action=default', 'action=edit')
-      .replace('action=view', 'action=edit');
-    console.log('[NovaDoc] editUrl:', editUrl);
-    window.open(protocol + ':ofe|u|' + editUrl, '_self');
+    // Construire l'URL directe depuis parentPath : /drives/xxx/root:/Dossier/SousDossier
+    const rel = decodeURIComponent((parentPath || '').split('root:')[1] || '');
+    const directUrl = SP_DOC_BASE + rel + '/' + name;
+    window.location.href = protocol + ':ofe|u|' + directUrl;
   } else {
-    const editUrl = (url || '').replace('action=default', 'action=edit');
+    const editUrl = url.replace('action=default', 'action=edit');
     window.open(editUrl, '_blank');
   }
 }
