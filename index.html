@@ -1967,6 +1967,7 @@ async function createNew(type) {
     if (!name) return;
     try {
       const newFolder = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children`, 'POST', {
+	  console.log('newFolder:', newFolder);
         name, folder: {}, '@microsoft.graph.conflictBehavior': 'rename'
       });
       if (newFolder && newFolder.id && currentUserEmail) {
@@ -2019,6 +2020,7 @@ async function createNew(type) {
     });
     if (!putRes.ok) throw new Error(await putRes.text());
     const newFile = await putRes.json().catch(()=>null);
+	console.log('newFile:', newFile);
     if (newFile && newFile.id && currentUserEmail) {
       try {
         await graphCall(`/drives/${currentDriveId}/items/${newFile.id}/invite`, 'POST', {
