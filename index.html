@@ -1967,9 +1967,9 @@ async function createNew(type) {
     if (!name) return;
     try {
       const newFolder = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children`, 'POST', {
-	  console.log('newFolder:', newFolder);
         name, folder: {}, '@microsoft.graph.conflictBehavior': 'rename'
       });
+      console.log('newFolder:', newFolder);
       if (newFolder && newFolder.id && currentUserEmail) {
         try {
           await graphCall(`/drives/${currentDriveId}/items/${newFolder.id}/invite`, 'POST', {
