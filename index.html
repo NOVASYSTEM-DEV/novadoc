@@ -272,7 +272,7 @@
 </div>
 
 <div class="modal-overlay" id="permissions-modal">
-  <div class="modal" style="width:620px;max-width:95vw">
+  <div class="modal" style="width:660px;max-width:95vw">
     <div class="modal-header">
       <h3 style="margin:0">🔐 Gérer les accès — <span id="perm-title"></span></h3>
       <button class="modal-close" onclick="closePermissionsModal()">×</button>
@@ -280,15 +280,23 @@
     <div class="modal-body" style="padding:0">
       <!-- Tabs -->
       <div style="display:flex;border-bottom:1px solid var(--border)">
-        <button class="perm-tab active" id="tab-members" onclick="switchPermTab('members')">👥 Membres</button>
-        <button class="perm-tab" id="tab-add" onclick="switchPermTab('add')">➕ Ajouter</button>
+        <button class="perm-tab active" id="tab-members" onclick="switchPermTab('members')">👥 Groupes</button>
+        <button class="perm-tab" id="tab-direct" onclick="switchPermTab('direct')">👤 Accès directs</button>
+        <button class="perm-tab" id="tab-add" onclick="switchPermTab('add')">➕ Ajouter accès direct</button>
         <button class="perm-tab" id="tab-link" onclick="switchPermTab('link')">🔗 Lien</button>
       </div>
-      <!-- Tab membres (groupes NOVADOC) -->
+
+      <!-- Tab groupes NOVADOC -->
       <div id="perm-tab-members" style="padding:16px">
+        <div id="perm-groups-list"><div class="loading"><div class="spinner"></div> Chargement...</div></div>
+      </div>
+
+      <!-- Tab accès directs -->
+      <div id="perm-tab-direct" style="padding:16px;display:none">
         <div id="perm-members-list"><div class="loading"><div class="spinner"></div> Chargement...</div></div>
       </div>
-      <!-- Tab ajouter -->
+
+      <!-- Tab ajouter accès direct -->
       <div id="perm-tab-add" style="padding:16px;display:none">
         <label class="modal-label">Email (compte Microsoft)</label>
         <input type="text" id="perm-add-email" class="modal-input" placeholder="prenom.nom@domaine.com">
@@ -301,6 +309,7 @@
         <button class="btn-primary" style="margin-top:14px;width:100%" onclick="addPermission()">➕ Ajouter l'accès</button>
         <div id="perm-add-status" style="margin-top:8px;font-size:13px;text-align:center"></div>
       </div>
+
       <!-- Tab lien -->
       <div id="perm-tab-link" style="padding:16px;display:none">
         <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">Créer un lien de partage accessible sans compte Microsoft</p>
@@ -1165,7 +1174,7 @@ async function addPermission() {
   btn.textContent = 'Ajout en cours...'; btn.disabled = true;
 
   // Mapping NovaDoc → rôles Graph API
-  const graphRole = role === 'owner' ? 'owner'
+  const graphRole = role === 'owner' ? 'write'
                 : role === 'write' ? 'write'
                 : 'read';
 
@@ -1202,7 +1211,6 @@ async function showPermissionsModal() {
   document.getElementById('perm-title').textContent = ctxTarget.name;
   document.getElementById('permissions-modal').classList.add('open');
   switchPermTab('members');
-  await loadPermissions();
 }
 
 function showInfoModal(icon, title, msg) {
@@ -1220,13 +1228,114 @@ function closePermissionsModal() {
 }
 
 function switchPermTab(tab) {
-  ['members','add','link'].forEach(t => {
+  ['members','direct','add','link'].forEach(t => {
     document.getElementById('perm-tab-'+t).style.display = t === tab ? '' : 'none';
-    document.getElementById('tab-'+t).classList.toggle('active', t === tab);
+    const tabBtn = document.getElementById('tab-'+t);
+    if (tabBtn) tabBtn.classList.toggle('active', t === tab);
   });
   if (tab === 'add') updateRoleDesc();
+  if (tab === 'members') loadGroups();
+  if (tab === 'direct') loadPermissions();
 }
 
+// ─── GROUPES NOVADOC ──────────────────────────────────────────────────────────
+const NOVADOC_GROUPS = [
+  { id: 26, name: 'NOVADOC-ControleTotal', role: 'owner', label: 'Contrôle total', color: '#e67e22' },
+  { id: 27, name: 'NOVADOC-Modification',  role: 'write', label: 'Modification',   color: '#2f6fd4' },
+  { id: 29, name: 'NOVADOC-Lecture',       role: 'read',  label: 'Lecture seule',  color: '#27ae60' }
+];
+
+async function loadGroups() {
+  const container = document.getElementById('perm-groups-list');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
+  try {
+    const token = await getToken();
+    let html = '';
+    for (const grp of NOVADOC_GROUPS) {
+      const res = await fetch(`${SITE_URL}/_api/web/SiteGroups/GetById(${grp.id})/Users`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json;odata=verbose' }
+      });
+      const data = await res.json();
+      const users = (data.d && data.d.results) ? data.d.results.filter(u => u.PrincipalType === 1) : [];
+      html += `<div style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;padding:3px 8px;border-radius:10px;background:${grp.color};color:white">${grp.label}</span>
+            <span style="font-weight:600;font-size:13px">${grp.name}</span>
+          </div>
+          <button class="btn-secondary" style="font-size:12px;padding:4px 10px" onclick="showAddToGroup(${grp.id},'${grp.name}')">+ Ajouter</button>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:6px;overflow:hidden">`;
+      if (!users.length) {
+        html += `<div style="padding:10px 14px;font-size:13px;color:var(--text-muted)">Aucun membre</div>`;
+      } else {
+        users.forEach(u => {
+          const initials = (u.Title||'?').substring(0,2).toUpperCase();
+          html += `<div class="perm-member-row" style="padding:8px 14px">
+            <div class="perm-avatar" style="background:${grp.color}">${initials}</div>
+            <div class="perm-member-info">
+              <div class="perm-member-name">${u.Title||''}</div>
+              <div class="perm-member-email">${u.Email||''}</div>
+            </div>
+          </div>`;
+        });
+      }
+      html += `</div></div>`;
+    }
+    container.innerHTML = html;
+  } catch(e) {
+    container.innerHTML = `<div style="color:#e74c3c;padding:16px">Erreur: ${e.message}</div>`;
+  }
+}
+
+async function showAddToGroup(groupId, groupName) {
+  const email = prompt(`Ajouter un utilisateur au groupe ${groupName} :\n\nEmail Microsoft :`);
+  if (!email || !email.trim()) return;
+  try {
+    const token = await getToken();
+    // Résoudre l'utilisateur SP depuis son email
+    const resolveRes = await fetch(`${SITE_URL}/_api/web/EnsureUser('${email.trim()}')`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json;odata=verbose',
+        'Content-Type': 'application/json;odata=verbose',
+        'X-RequestDigest': await getRequestDigest(token)
+      }
+    });
+    if (!resolveRes.ok) throw new Error('Utilisateur introuvable : ' + email);
+    const userData = await resolveRes.json();
+    const userId = userData.d.Id;
+    // Ajouter au groupe
+    const addRes = await fetch(`${SITE_URL}/_api/web/SiteGroups/GetById(${groupId})/users`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json;odata=verbose',
+        'Content-Type': 'application/json;odata=verbose',
+        'X-RequestDigest': await getRequestDigest(token)
+      },
+      body: JSON.stringify({ '__metadata': { 'type': 'SP.User' }, 'LoginName': userData.d.LoginName })
+    });
+    if (!addRes.ok) throw new Error(await addRes.text());
+    alert(`✅ ${email} ajouté au groupe ${groupName}`);
+    await loadGroups();
+  } catch(e) {
+    alert('Erreur: ' + e.message);
+  }
+}
+
+async function getRequestDigest(token) {
+  const res = await fetch(`${SITE_URL}/_api/contextinfo`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json;odata=verbose'
+    }
+  });
+  const data = await res.json();
+  return data.d.GetContextWebInformation.FormDigestValue;
+}
 
 // Convertir les rôles Graph en 3 niveaux simplifiés
 function simplifyRole(roles) {
