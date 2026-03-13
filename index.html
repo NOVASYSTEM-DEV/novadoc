@@ -241,6 +241,10 @@
     Télécharger
   </div>
   <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-share" onclick="openShareModal()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+    Partager
+  </div>
   <div class="ctx-item" id="ctx-permissions" onclick="showPermissionsModal()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
     Gérer les accès
@@ -258,6 +262,82 @@
   <div class="ctx-item danger" onclick="ctxDelete()" id="ctx-delete" style="display:none">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
     Supprimer
+  </div>
+</div>
+
+<!-- MODAL PARTAGER -->
+<div class="modal-overlay" id="share-modal" onclick="if(event.target===this)closeShareModal()">
+  <div class="modal" style="width:520px;max-width:95vw">
+    <div class="modal-header">
+      <h3 style="margin:0">🔗 Partager — <span id="share-title"></span></h3>
+      <button class="modal-close" onclick="closeShareModal()">×</button>
+    </div>
+    <div class="modal-body" style="padding:16px;display:flex;flex-direction:column;gap:0">
+
+      <!-- Onglets -->
+      <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:16px">
+        <button id="share-tab-invite" onclick="switchShareTab('invite')" style="padding:8px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px">✉️ Inviter</button>
+        <button id="share-tab-link" onclick="switchShareTab('link')" style="padding:8px 18px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--text-muted);border-bottom:2px solid transparent;margin-bottom:-1px">🔗 Lien</button>
+      </div>
+
+      <!-- Onglet Inviter -->
+      <div id="share-panel-invite">
+        <div style="margin-bottom:12px">
+          <label class="modal-label">Destinataires (emails séparés par virgule)</label>
+          <input type="text" id="share-emails" class="modal-input" placeholder="prenom.nom@domaine.com, autre@domaine.com">
+        </div>
+        <div style="margin-bottom:12px">
+          <label class="modal-label">Niveau d'accès</label>
+          <select id="share-role" class="modal-input">
+            <option value="write">Modification</option>
+            <option value="read">Lecture seule</option>
+          </select>
+        </div>
+        <div style="margin-bottom:12px">
+          <label class="modal-label">Message (optionnel)</label>
+          <textarea id="share-message" class="modal-input" rows="2" style="resize:vertical" placeholder="Voici le document partagé..."></textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <input type="checkbox" id="share-send-email" checked style="cursor:pointer">
+          <label for="share-send-email" style="font-size:13px;cursor:pointer">Envoyer un email de notification</label>
+        </div>
+      </div>
+
+      <!-- Onglet Lien -->
+      <div id="share-panel-link" style="display:none">
+        <div style="margin-bottom:12px">
+          <label class="modal-label">Type de lien</label>
+          <select id="share-link-type" class="modal-input">
+            <option value="view">Lecture seule</option>
+            <option value="edit">Modification</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <div style="flex:1">
+            <label class="modal-label">Expiration (optionnel)</label>
+            <input type="date" id="share-link-expiry" class="modal-input">
+          </div>
+          <div style="flex:1">
+            <label class="modal-label">Mot de passe (optionnel)</label>
+            <input type="text" id="share-link-password" class="modal-input" placeholder="Laisser vide = sans mdp">
+          </div>
+        </div>
+        <div id="share-link-result" style="display:none">
+          <label class="modal-label">Lien généré</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="share-link-url" class="modal-input" readonly style="flex:1;background:var(--bg);font-size:12px">
+            <button class="btn-secondary" style="padding:6px 12px;font-size:12px;white-space:nowrap" onclick="copyShareLink()">📋 Copier</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn-secondary" onclick="closeShareModal()">Fermer</button>
+      <button class="btn-primary" id="share-action-btn" onclick="doShareAction()">
+        <span id="share-action-text">Envoyer l'invitation</span>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -1545,108 +1625,149 @@ function updateRoleDesc() {
   if (d) { desc.textContent = d.text; desc.style.borderLeft = '3px solid '+d.color; desc.style.paddingLeft = '10px'; desc.style.color = 'var(--text-muted)'; desc.style.fontSize = '12px'; desc.style.marginTop = '6px'; }
 }
 
-async function createShareLink(type) {
-  try {
-    const res = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/createLink', 'POST', {
-      type: type === 'view' ? 'view' : 'edit', scope: 'anonymous'
-    });
-    const url = (res.link && res.link.webUrl) || '';
-    document.getElementById('perm-link-url').value = url;
-    document.getElementById('perm-link-result').style.display = '';
-  } catch(e) {
-    if (e.message.includes('AnonymousLinkCreation') || e.message.includes('disabled')) {
-      alert('Les liens anonymes sont désactivés sur ce tenant.\nActivez-les dans : Centre admin SharePoint > Stratégies > Partage.');
-    } else {
-      alert('Erreur: '+e.message);
-    }
-  }
+
+// ─── PARTAGER ─────────────────────────────────────────────────────────────────
+
+function openShareModal() {
+  if (!ctxTarget) return;
+  document.getElementById('share-title').textContent = ctxTarget.name;
+  document.getElementById('share-emails').value = '';
+  document.getElementById('share-role').value = 'write';
+  document.getElementById('share-message').value = '';
+  document.getElementById('share-send-email').checked = true;
+  document.getElementById('share-link-type').value = 'view';
+  document.getElementById('share-link-expiry').value = '';
+  document.getElementById('share-link-password').value = '';
+  document.getElementById('share-link-result').style.display = 'none';
+  document.getElementById('share-link-url').value = '';
+  switchShareTab('invite');
+  document.getElementById('share-modal').classList.add('open');
 }
 
-function copyAndAlert(url) {
-  navigator.clipboard.writeText(url);
-  alert('Lien copié !');
+function closeShareModal() {
+  document.getElementById('share-modal').classList.remove('open');
+}
+
+function switchShareTab(tab) {
+  const isInvite = tab === 'invite';
+  document.getElementById('share-panel-invite').style.display = isInvite ? '' : 'none';
+  document.getElementById('share-panel-link').style.display = isInvite ? 'none' : '';
+  document.getElementById('share-tab-invite').style.color = isInvite ? 'var(--accent)' : 'var(--text-muted)';
+  document.getElementById('share-tab-invite').style.borderBottomColor = isInvite ? 'var(--accent)' : 'transparent';
+  document.getElementById('share-tab-link').style.color = isInvite ? 'var(--text-muted)' : 'var(--accent)';
+  document.getElementById('share-tab-link').style.borderBottomColor = isInvite ? 'transparent' : 'var(--accent)';
+  document.getElementById('share-action-text').textContent = isInvite ? "Envoyer l'invitation" : 'Générer le lien';
 }
 
 function copyShareLink() {
-  navigator.clipboard.writeText(document.getElementById('perm-link-url').value);
-  alert('Lien copié !');
+  const url = document.getElementById('share-link-url').value;
+  if (!url) return;
+  navigator.clipboard.writeText(url).then(() => alert('✅ Lien copié dans le presse-papiers'));
 }
 
-function closeShareModal() { document.getElementById('share-modal').classList.remove('open'); }
+async function doShareAction() {
+  const tab = document.getElementById('share-panel-invite').style.display !== 'none' ? 'invite' : 'link';
+  if (tab === 'invite') await doShareInvite();
+  else await doShareLink();
+}
 
-async function doShare() {
-  const emails = document.getElementById('share-emails').value.split(',').map(e=>e.trim()).filter(Boolean);
+async function doShareInvite() {
+  const emails = document.getElementById('share-emails').value.split(',').map(e => e.trim()).filter(Boolean);
   const role = document.getElementById('share-role').value;
   const message = document.getElementById('share-message').value;
+  const sendEmail = document.getElementById('share-send-email').checked;
   if (!emails.length) { alert('Entrez au moins un email'); return; }
-  
-  const btn = document.getElementById('share-btn-text');
+
+  const btn = document.getElementById('share-action-text');
   btn.textContent = 'Envoi...';
 
   try {
-    const novadocLink = APP_URL;
     const token = await getToken();
-    const roleLabel = role === 'write' ? 'Lecture et modification' : 'Lecture seule';
-    
-    // Étape 1: Accorder les droits via invite (sans email Microsoft)
+    const roleLabel = role === 'write' ? 'Modification' : 'Lecture seule';
+
     for (const email of emails) {
       await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}/invite`, 'POST', {
         requireSignIn: true,
         sendInvitation: false,
-        roles: [role === 'write' ? 'write' : 'read'],
+        roles: [role],
         recipients: [{ email }]
       });
     }
 
-    // Étape 2: Envoyer notre propre email via Mail.Send (sans liens SharePoint)
-    for (const email of emails) {
-      const htmlContent = `
-        <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px">
-          <h2 style="color:#2f6fd4">NovaDoc — Partage de document</h2>
-          <p>Bonjour,</p>
-          <p>${message || `<strong>${document.getElementById('user-name').textContent}</strong> vous a partagé l'élément suivant :`}</p>
-          <div style="background:#f4f5f7;border-radius:8px;padding:16px;margin:20px 0">
-            <strong>${ctxTarget.name}</strong><br>
-            <span style="color:#666;font-size:13px">Droits : ${roleLabel}</span>
-          </div>
-          <a href="${novadocLink}" style="display:inline-block;background:#2f6fd4;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">
-            Accéder à NovaDoc
-          </a>
-          <p style="color:#999;font-size:12px;margin-top:24px">
-            Connectez-vous avec votre compte Microsoft 365 sur ${novadocLink}
-          </p>
-        </div>`;
-      
-      const mailBody = {
-        message: {
-          subject: `[NovaDoc] ${document.getElementById('user-name').textContent} a partagé "${ctxTarget.name}"`,
-          body: { contentType: 'HTML', content: htmlContent },
-          toRecipients: [{ emailAddress: { address: email } }]
-        },
-        saveToSentItems: false
-      };
-      
-      const mailRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(mailBody)
-      });
-      if (!mailRes.ok) {
-        const errText = await mailRes.text();
-        if (errText.includes('MailboxNotEnabledForRESTAPI') || errText.includes('inactive') || errText.includes('on-premise')) {
-          console.warn('Email non envoyé (boîte non Exchange Online) - partage accordé quand même');
-        } else {
-          throw new Error(errText);
+    if (sendEmail) {
+      for (const email of emails) {
+        const senderName = document.getElementById('user-name').textContent;
+        const msgContent = message || `${senderName} vous a partagé l'élément suivant :`;
+        const htmlContent = `
+          <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px">
+            <h2 style="color:#2f6fd4">NovaDoc — Partage</h2>
+            <p>Bonjour,</p>
+            <p>${msgContent}</p>
+            <div style="background:#f4f5f7;border-radius:8px;padding:16px;margin:20px 0">
+              <strong>${ctxTarget.name}</strong><br>
+              <span style="color:#666;font-size:13px">Droits : ${roleLabel}</span>
+            </div>
+            <a href="${APP_URL}" style="display:inline-block;background:#2f6fd4;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">
+              Accéder à NovaDoc
+            </a>
+            <p style="color:#999;font-size:12px;margin-top:24px">Connectez-vous avec votre compte Microsoft 365 sur ${APP_URL}</p>
+          </div>`;
+        const mailRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: {
+              subject: `[NovaDoc] ${senderName} a partagé "${ctxTarget.name}"`,
+              body: { contentType: 'HTML', content: htmlContent },
+              toRecipients: [{ emailAddress: { address: email } }]
+            },
+            saveToSentItems: false
+          })
+        });
+        if (!mailRes.ok) {
+          const err = await mailRes.text();
+          if (!err.includes('MailboxNotEnabledForRESTAPI') && !err.includes('inactive') && !err.includes('on-premise')) {
+            throw new Error(err);
+          }
         }
       }
     }
-    
+
     closeShareModal();
-    alert(`✅ Droits accordés à : ${emails.join(', ')}\n\n(Email de notification non envoyé : boîte mail non compatible Exchange Online)`);
+    alert(`✅ Accès accordé à : ${emails.join(', ')}`);
   } catch(e) {
-    alert('Erreur partage: '+e.message);
+    alert('Erreur partage : ' + e.message);
   } finally {
     btn.textContent = "Envoyer l'invitation";
+  }
+}
+
+async function doShareLink() {
+  const linkType = document.getElementById('share-link-type').value;
+  const expiry = document.getElementById('share-link-expiry').value;
+  const password = document.getElementById('share-link-password').value.trim();
+
+  const btn = document.getElementById('share-action-text');
+  btn.textContent = 'Génération...';
+
+  try {
+    const body = {
+      type: linkType,
+      scope: 'organization'
+    };
+    if (expiry) body.expirationDateTime = new Date(expiry + 'T23:59:59Z').toISOString();
+    if (password) body.password = password;
+
+    const result = await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}/createLink`, 'POST', body);
+    const url = result?.link?.webUrl;
+    if (!url) throw new Error('Lien non retourné par Graph');
+
+    document.getElementById('share-link-url').value = url;
+    document.getElementById('share-link-result').style.display = '';
+  } catch(e) {
+    alert('Erreur génération lien : ' + e.message);
+  } finally {
+    btn.textContent = 'Générer le lien';
   }
 }
 
@@ -1967,9 +2088,9 @@ async function createNew(type) {
     if (!name) return;
     try {
       const newFolder = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children`, 'POST', {
+	  console.log('newFolder:', newFolder);
         name, folder: {}, '@microsoft.graph.conflictBehavior': 'rename'
       });
-      console.log('newFolder:', newFolder);
       if (newFolder && newFolder.id && currentUserEmail) {
         try {
           await graphCall(`/drives/${currentDriveId}/items/${newFolder.id}/invite`, 'POST', {
