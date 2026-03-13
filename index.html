@@ -1080,7 +1080,8 @@ async function ctxDelete() {
   try {
     await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}`, 'DELETE');
     await loadCurrentFolder();
-  } catch(e) { 
+  } catch(e) {
+    console.log('erreur message:', e.message);
     if (e.message.includes('403') || e.message.includes('accessDenied')) {
       alert('❌ Vous ne disposez pas des droits nécessaires pour supprimer cet élément.');
     } else {
