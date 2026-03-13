@@ -1156,8 +1156,8 @@ async function addPermission() {
 
   // Mapping NovaDoc → rôles Graph API
   const graphRole = role === 'owner' ? 'owner'
-                  : role === 'write' ? 'write'
-                  : 'read';
+                : role === 'write' ? 'contribute'
+                : 'read';
 
   try {
     await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/invite', 'POST', {
