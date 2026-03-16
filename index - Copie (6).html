@@ -734,31 +734,8 @@ async function expandTreeTo(path) {
 // Détecter le rôle réel via PATCH anodin — fonctionne pour users internes ET guests
 async function detectRole(itemId) {
   const token = await getToken();
-
-  // Pour root : on ne peut pas PATCHer la racine → tester via un enfant temporaire
-  if (itemId === 'root' || itemId === null || itemId === undefined) {
-    try {
-      // Tenter de créer un dossier test puis le supprimer immédiatement
-      const testName = `.novatest_${Date.now()}`;
-      const createRes = await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/root/children`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: testName, folder: {}, '@microsoft.graph.conflictBehavior': 'rename' })
-      });
-      if (!createRes.ok) return 'read';
-      const created = await createRes.json();
-      // Supprimer immédiatement
-      await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/items/${created.id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      return 'owner'; // peut créer à la racine = admin/owner
-    } catch {
-      return 'read';
-    }
-  }
-
-  const endpoint = `/drives/${currentDriveId}/items/${itemId}`;
+  const resolvedId = itemId === 'root' ? 'root' : itemId;
+  const endpoint = `/drives/${currentDriveId}/items/${resolvedId}`;
 
   try {
     // Récupérer le nom actuel de l'item

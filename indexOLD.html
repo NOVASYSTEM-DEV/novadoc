@@ -241,10 +241,6 @@
     Télécharger
   </div>
   <div class="ctx-sep"></div>
-  <div class="ctx-item" id="ctx-share" onclick="openShareModal()">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-    Partager
-  </div>
   <div class="ctx-item" id="ctx-permissions" onclick="showPermissionsModal()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
     Gérer les accès
@@ -265,82 +261,6 @@
   </div>
 </div>
 
-<!-- MODAL PARTAGER -->
-<div class="modal-overlay" id="share-modal" onclick="if(event.target===this)closeShareModal()">
-  <div class="modal" style="width:520px;max-width:95vw">
-    <div class="modal-header">
-      <h3 style="margin:0">🔗 Partager — <span id="share-title"></span></h3>
-      <button class="modal-close" onclick="closeShareModal()">×</button>
-    </div>
-    <div class="modal-body" style="padding:16px;display:flex;flex-direction:column;gap:0">
-
-      <!-- Onglets -->
-      <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:16px">
-        <button id="share-tab-invite" onclick="switchShareTab('invite')" style="padding:8px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px">✉️ Inviter</button>
-        <button id="share-tab-link" onclick="switchShareTab('link')" style="padding:8px 18px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--text-muted);border-bottom:2px solid transparent;margin-bottom:-1px">🔗 Lien</button>
-      </div>
-
-      <!-- Onglet Inviter -->
-      <div id="share-panel-invite">
-        <div style="margin-bottom:12px">
-          <label class="modal-label">Destinataires (emails séparés par virgule)</label>
-          <input type="text" id="share-emails" class="modal-input" placeholder="prenom.nom@domaine.com, autre@domaine.com">
-        </div>
-        <div style="margin-bottom:12px">
-          <label class="modal-label">Niveau d'accès</label>
-          <select id="share-role" class="modal-input">
-            <option value="write">Modification</option>
-            <option value="read">Lecture seule</option>
-          </select>
-        </div>
-        <div style="margin-bottom:12px">
-          <label class="modal-label">Message (optionnel)</label>
-          <textarea id="share-message" class="modal-input" rows="2" style="resize:vertical" placeholder="Voici le document partagé..."></textarea>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-          <input type="checkbox" id="share-send-email" checked style="cursor:pointer">
-          <label for="share-send-email" style="font-size:13px;cursor:pointer">Envoyer un email de notification</label>
-        </div>
-      </div>
-
-      <!-- Onglet Lien -->
-      <div id="share-panel-link" style="display:none">
-        <div style="margin-bottom:12px">
-          <label class="modal-label">Type de lien</label>
-          <select id="share-link-type" class="modal-input">
-            <option value="view">Lecture seule</option>
-            <option value="edit">Modification</option>
-          </select>
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <div style="flex:1">
-            <label class="modal-label">Expiration (optionnel)</label>
-            <input type="date" id="share-link-expiry" class="modal-input">
-          </div>
-          <div style="flex:1">
-            <label class="modal-label">Mot de passe (optionnel)</label>
-            <input type="text" id="share-link-password" class="modal-input" placeholder="Laisser vide = sans mdp">
-          </div>
-        </div>
-        <div id="share-link-result" style="display:none">
-          <label class="modal-label">Lien généré</label>
-          <div style="display:flex;gap:8px">
-            <input type="text" id="share-link-url" class="modal-input" readonly style="flex:1;background:var(--bg);font-size:12px">
-            <button class="btn-secondary" style="padding:6px 12px;font-size:12px;white-space:nowrap" onclick="copyShareLink()">📋 Copier</button>
-          </div>
-        </div>
-      </div>
-
-    </div>
-    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
-      <button class="btn-secondary" onclick="closeShareModal()">Fermer</button>
-      <button class="btn-primary" id="share-action-btn" onclick="doShareAction()">
-        <span id="share-action-text">Envoyer l'invitation</span>
-      </button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL PERMISSIONS -->
 <div class="modal-overlay" id="info-modal" onclick="if(event.target===this)closeInfoModal()">
   <div class="modal" style="width:380px;text-align:center">
@@ -352,103 +272,61 @@
 </div>
 
 <div class="modal-overlay" id="permissions-modal">
-  <div class="modal" style="width:520px;max-width:95vw">
+  <div class="modal" style="width:620px;max-width:95vw">
     <div class="modal-header">
       <h3 style="margin:0">🔐 Gérer les accès — <span id="perm-title"></span></h3>
       <button class="modal-close" onclick="closePermissionsModal()">×</button>
     </div>
-    <div class="modal-body" style="padding:16px;display:flex;flex-direction:column;gap:12px">
-
-      <!-- Zone haute : liste groupes + users -->
-      <div>
-        <label class="modal-label">Groupes et utilisateurs</label>
-        <div id="perm-principals-list" style="border:1px solid var(--border);border-radius:6px;min-height:120px;max-height:180px;overflow-y:auto;background:white">
-          <div class="loading"><div class="spinner"></div> Chargement...</div>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn-secondary" style="font-size:12px;padding:5px 12px" onclick="showAddPrincipal()">➕ Ajouter</button>
-          <button class="btn-secondary" style="font-size:12px;padding:5px 12px" onclick="removeSelectedPrincipal()">🗑 Supprimer</button>
-        </div>
+    <div class="modal-body" style="padding:0">
+      <!-- Tabs -->
+      <div style="display:flex;border-bottom:1px solid var(--border)">
+        <button class="perm-tab active" id="tab-members" onclick="switchPermTab('members')">👥 Membres</button>
+        <button class="perm-tab" id="tab-add" onclick="switchPermTab('add')">➕ Ajouter</button>
+        <button class="perm-tab" id="tab-link" onclick="switchPermTab('link')">🔗 Lien</button>
       </div>
-
-      <!-- Zone basse : permissions du principal sélectionné -->
-      <div>
-        <label class="modal-label" id="perm-detail-label">Autorisations</label>
-        <div style="border:1px solid var(--border);border-radius:6px;overflow:hidden">
-          <table style="width:100%;border-collapse:collapse">
-            <thead>
-              <tr style="background:var(--bg);border-bottom:1px solid var(--border)">
-                <th style="text-align:left;padding:8px 14px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Permission</th>
-                <th style="text-align:center;padding:8px 14px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;width:80px">Autoriser</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr style="border-bottom:1px solid var(--border)">
-                <td style="padding:10px 14px;font-size:13px">Contrôle total</td>
-                <td style="text-align:center;padding:10px 14px"><input type="radio" name="perm-level" value="owner" onchange="onPermLevelChange(this)"></td>
-              </tr>
-              <tr style="border-bottom:1px solid var(--border)">
-                <td style="padding:10px 14px;font-size:13px">Modification</td>
-                <td style="text-align:center;padding:10px 14px"><input type="radio" name="perm-level" value="write" onchange="onPermLevelChange(this)"></td>
-              </tr>
-              <tr>
-                <td style="padding:10px 14px;font-size:13px">Lecture seule</td>
-                <td style="text-align:center;padding:10px 14px"><input type="radio" name="perm-level" value="read" onchange="onPermLevelChange(this)"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+      <!-- Tab membres (groupes NOVADOC) -->
+      <div id="perm-tab-members" style="padding:16px">
+        <div id="perm-members-list"><div class="loading"><div class="spinner"></div> Chargement...</div></div>
       </div>
-
-    </div>
-    <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center">
-		<a href="https://novasystemfr.sharepoint.com/sites/TESTSHAREPOINTEXCEL/_layouts/15/newgrp.aspx" target="_blank" class="btn-secondary" style="font-size:12px;padding:5px 12px;text-decoration:none">⚙️ Créer un groupe SP</a>
-		<button class="btn-secondary" onclick="closePermissionsModal()">Fermer</button>
-	</div>
-  </div>
-</div>
-
-<!-- Modal ajout principal -->
-<div class="modal-overlay" id="add-principal-modal">
-  <div class="modal" style="width:420px">
-    <div class="modal-header">
-      <h3 style="margin:0">➕ Ajouter un accès</h3>
-      <button class="modal-close" onclick="closeAddPrincipal()">×</button>
-    </div>
-    <div class="modal-body" style="padding:16px;display:flex;flex-direction:column;gap:12px">
-      <div>
-        <label class="modal-label">Type</label>
-        <select id="add-principal-type" class="modal-input" onchange="onPrincipalTypeChange()">
-          <option value="user">Utilisateur (email)</option>
-          <option value="group">Groupe NOVADOC</option>
+      <!-- Tab ajouter -->
+      <div id="perm-tab-add" style="padding:16px;display:none">
+        <label class="modal-label">Email (compte Microsoft)</label>
+        <input type="text" id="perm-add-email" class="modal-input" placeholder="prenom.nom@domaine.com">
+        <label class="modal-label" style="margin-top:12px">Niveau d'accès</label>
+        <select id="perm-add-role" class="modal-input">
+          <option value="owner">Contrôle total — gérer les droits, créer, modifier, supprimer</option>
+          <option value="write" selected>Modification — créer, modifier, supprimer</option>
+          <option value="read">Lecture seule — voir et télécharger</option>
         </select>
+        <button class="btn-primary" style="margin-top:14px;width:100%" onclick="addPermission()">➕ Ajouter l'accès</button>
+        <div id="perm-add-status" style="margin-top:8px;font-size:13px;text-align:center"></div>
       </div>
-      <div id="add-principal-user-field">
-        <label class="modal-label">Email Microsoft</label>
-        <input type="text" id="add-principal-email" class="modal-input" placeholder="prenom.nom@domaine.com">
-      </div>
-      <div id="add-principal-group-field" style="display:none">
-        <label class="modal-label">Groupe</label>
-        <select id="add-principal-group" class="modal-input">
-          <option value="26">NOVADOC-ControleTotal</option>
-          <option value="27">NOVADOC-Modification</option>
-          <option value="29">NOVADOC-Lecture</option>
-        </select>
-        <label class="modal-label" style="margin-top:12px">Email à ajouter au groupe</label>
-        <input type="text" id="add-group-email" class="modal-input" placeholder="prenom.nom@domaine.com">
-      </div>
-      <div>
-        <label class="modal-label">Niveau d'accès sur cet élément</label>
-        <select id="add-principal-role" class="modal-input">
-          <option value="owner">Contrôle total</option>
-          <option value="write" selected>Modification</option>
-          <option value="read">Lecture seule</option>
-        </select>
+      <!-- Tab lien -->
+      <div id="perm-tab-link" style="padding:16px;display:none">
+        <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">Créer un lien de partage accessible sans compte Microsoft</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="background:var(--bg-secondary);border-radius:8px;padding:14px">
+            <div style="font-weight:600;margin-bottom:4px">🔓 Lien public (lecture seule)</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-bottom:10px">Toute personne avec le lien peut consulter</div>
+            <button class="btn-secondary" onclick="createShareLink('view')" style="width:100%">Créer le lien</button>
+          </div>
+          <div style="background:var(--bg-secondary);border-radius:8px;padding:14px">
+            <div style="font-weight:600;margin-bottom:4px">✏️ Lien avec modification</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-bottom:10px">Toute personne avec le lien peut modifier</div>
+            <button class="btn-secondary" onclick="createShareLink('edit')" style="width:100%">Créer le lien</button>
+          </div>
+        </div>
+        <div id="perm-link-result" style="margin-top:12px;display:none">
+          <label class="modal-label">Lien généré</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="perm-link-url" class="modal-input" readonly style="flex:1">
+            <button class="btn-secondary" onclick="copyShareLink()">Copier</button>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
-      <button class="btn-secondary" onclick="closeAddPrincipal()">Annuler</button>
-      <button class="btn-primary" onclick="confirmAddPrincipal()">Ajouter</button>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closePermissionsModal()">Fermer</button>
     </div>
   </div>
 </div>
@@ -731,76 +609,39 @@ async function expandTreeTo(path) {
   }
 }
 
-// Détecter le rôle réel via PATCH anodin — fonctionne pour users internes ET guests
+// Détecter le rôle sur un item — remonte sur les parents si permissions vides (héritage SP)
 async function detectRole(itemId) {
-  const token = await getToken();
+  const visited = new Set();
+  let id = itemId;
+  while (id && !visited.has(id)) {
+    visited.add(id);
+    const permsData = await graphCall(`/drives/${currentDriveId}/items/${id}/permissions`);
+    const perms = permsData.value || [];
 
-  // Pour root : on ne peut pas PATCHer la racine → tester via un enfant temporaire
-  if (itemId === 'root' || itemId === null || itemId === undefined) {
-    try {
-      // Tenter de créer un dossier test puis le supprimer immédiatement
-      const testName = `.novatest_${Date.now()}`;
-      const createRes = await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/root/children`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: testName, folder: {}, '@microsoft.graph.conflictBehavior': 'rename' })
-      });
-      if (!createRes.ok) return 'read';
-      const created = await createRes.json();
-      // Supprimer immédiatement
-      await fetch(`${GRAPH_BASE}/drives/${currentDriveId}/items/${created.id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      return 'owner'; // peut créer à la racine = admin/owner
-    } catch {
-      return 'read';
-    }
-  }
-
-  const endpoint = `/drives/${currentDriveId}/items/${itemId}`;
-
-  try {
-    // Récupérer le nom actuel de l'item
-    const itemData = await graphCall(`${endpoint}?$select=id,name`);
-
-    // PATCH no-op : renvoyer le même nom — teste write sans rien changer
-    const patchRes = await fetch(`${GRAPH_BASE}${endpoint}`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ name: itemData.name })
+    // Chercher une permission directe pour l'utilisateur courant
+    const myPerm = perms.find(p => {
+      const u = (p.grantedToV2&&p.grantedToV2.user)||(p.grantedTo&&p.grantedTo.user)||{};
+      return (u.email||'').toLowerCase() === currentUserEmail;
     });
+    if (myPerm) return resolveRole(myPerm.roles);
 
-    if (!patchRes.ok) return 'read';
+    // Chercher via les groupes (grantedToIdentities)
+    const groupPerm = perms.find(p => {
+      const ids = p.grantedToIdentitiesV2 || p.grantedToIdentities || [];
+      return ids.length > 0 && p.roles && p.roles.length > 0;
+    });
+    if (groupPerm) return resolveRole(groupPerm.roles);
 
-    // PATCH ok = au moins write. Tester owner via GET /permissions
+    // Permissions vides = héritage actif → remonter au parent
+    if (id === 'root') break;
     try {
-      const permData = await graphCall(`${endpoint}/permissions`);
-      const myOwner = (permData.value || []).find(p => {
-        const u = (p.grantedToV2&&p.grantedToV2.user)||(p.grantedTo&&p.grantedTo.user)||{};
-        const isMe = (u.email||'').toLowerCase() === currentUserEmail;
-        const ids = p.grantedToIdentitiesV2 || p.grantedToIdentities || [];
-        const meInIds = ids.some(i => (i.user&&(i.user.email||'').toLowerCase()===currentUserEmail));
-        return (isMe || meInIds) && p.roles && p.roles.includes('owner');
-      });
-      if (myOwner) return 'owner';
-
-      // Fallback owner : tenter POST createLink (échoue en 403 si pas owner)
-      const linkRes = await fetch(`${GRAPH_BASE}${endpoint}/createLink`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'view', scope: 'organization' })
-      });
-      if (linkRes.ok) return 'owner';
-    } catch { /* pas owner */ }
-
-    return 'write';
-  } catch {
-    return 'read';
+      const itemData = await graphCall(`/drives/${currentDriveId}/items/${id}?$select=id,parentReference`);
+      const parentId = itemData.parentReference && itemData.parentReference.id;
+      if (!parentId || parentId === id) break;
+      id = parentId;
+    } catch { break; }
   }
+  return 'read'; // aucune permission trouvée
 }
 
 async function loadCurrentFolder(filter='') {
@@ -1263,26 +1104,7 @@ async function loadPermissions() {
   if (!ctxTarget) { list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Sélectionnez un élément</div>'; return; }
   try {
     const data = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions');
-    const SP_NATIVE_GROUPS = [
-  'propriétaires', 'membres', 'visiteurs', 'concepteurs', 
-  'gestionnaires', 'approbateurs', 'lecteurs', 'excel services',
-  'tout le monde', 'tous les utilisateurs', 'deployment'
-];
-
-const perms = (data.value || []).filter(p => {
-  // Garder les users directs
-  if (p.grantedToV2 && p.grantedToV2.user) return true;
-  // Pour les groupes, filtrer les groupes SP natifs
-  const identities = p.grantedToIdentitiesV2 || p.grantedToIdentities || [];
-  if (identities.length) {
-    return identities.some(ident => {
-      const grp = ident.group || ident.siteGroup || {};
-      const name = (grp.displayName || '').toLowerCase();
-      return !SP_NATIVE_GROUPS.some(n => name.includes(n));
-    });
-  }
-  return false;
-});
+    const perms = (data.value || []);
     if (!perms.length) {
       list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">Aucune permission explicite (héritage SharePoint actif)</div>';
       return;
@@ -1380,6 +1202,7 @@ async function showPermissionsModal() {
   document.getElementById('perm-title').textContent = ctxTarget.name;
   document.getElementById('permissions-modal').classList.add('open');
   switchPermTab('members');
+  await loadPermissions();
 }
 
 function showInfoModal(icon, title, msg) {
@@ -1397,235 +1220,15 @@ function closePermissionsModal() {
 }
 
 function switchPermTab(tab) {
-  ['members','direct','add','link'].forEach(t => {
+  ['members','add','link'].forEach(t => {
     document.getElementById('perm-tab-'+t).style.display = t === tab ? '' : 'none';
-    const tabBtn = document.getElementById('tab-'+t);
-    if (tabBtn) tabBtn.classList.toggle('active', t === tab);
+    document.getElementById('tab-'+t).classList.toggle('active', t === tab);
   });
   if (tab === 'add') updateRoleDesc();
-  if (tab === 'members') loadGroups();
-  if (tab === 'direct') loadPermissions();
 }
 
-// ─── GROUPES NOVADOC ──────────────────────────────────────────────────────────
-const NOVADOC_GROUPS = [
-  { id: 26, name: 'NOVADOC-ControleTotal', role: 'owner', label: 'Contrôle total', color: '#e67e22' },
-  { id: 27, name: 'NOVADOC-Modification',  role: 'write', label: 'Modification',   color: '#2f6fd4' },
-  { id: 29, name: 'NOVADOC-Lecture',       role: 'read',  label: 'Lecture seule',  color: '#27ae60' }
-];
 
-let selectedPrincipal = null; // { type: 'group'|'user', id, name, role, permId }
-
-async function getRequestDigest(token) {
-  const res = await fetch(`${SITE_URL}/_api/contextinfo`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json;odata=verbose' }
-  });
-  const data = await res.json();
-  return data.d.GetContextWebInformation.FormDigestValue;
-}
-
-async function loadPermissions() {
-  const list = document.getElementById('perm-principals-list');
-  list.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
-  if (!ctxTarget) return;
-  try {
-    const data = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions');
-    const SP_NATIVE_GROUPS = [
-  'propriétaires', 'membres', 'visiteurs', 'concepteurs', 
-  'gestionnaires', 'approbateurs', 'lecteurs', 'excel services',
-  'tout le monde', 'tous les utilisateurs', 'deployment'
-];
-
-const perms = (data.value || []).filter(p => {
-  // Garder les users directs
-  if (p.grantedToV2 && p.grantedToV2.user) return true;
-  // Pour les groupes, filtrer les groupes SP natifs
-  const identities = p.grantedToIdentitiesV2 || p.grantedToIdentities || [];
-  if (identities.length) {
-    return identities.some(ident => {
-      const grp = ident.group || ident.siteGroup || {};
-      const name = (grp.displayName || '').toLowerCase();
-      return !SP_NATIVE_GROUPS.some(n => name.includes(n));
-    });
-  }
-  return false;
-});
-    let html = '';
-
-    perms.forEach(p => {
-      // Groupes SP
-      const identities = p.grantedToIdentitiesV2 || p.grantedToIdentities || [];
-      if (identities.length) {
-        identities.forEach(ident => {
-          const grp = ident.group || ident.siteGroup || {};
-          const name = grp.displayName || 'Groupe inconnu';
-          const role = simplifyRole(p.roles);
-          const color = roleBadgeColor(role);
-          const label = roleLabel(role);
-          html += `<div class="perm-principal-row" data-type="group" data-id="${p.id}" data-name="${name}" data-role="${role}" data-permid="${p.id}" onclick="selectPrincipal(this)">
-            <div class="perm-avatar" style="background:${color};width:28px;height:28px;font-size:11px">G</div>
-            <div class="perm-member-info">
-              <div class="perm-member-name">${name}</div>
-            </div>
-            <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:${color};color:white">${label}</span>
-          </div>`;
-        });
-        return;
-      }
-      // Users directs
-      const user = (p.grantedToV2 && p.grantedToV2.user) || (p.grantedTo && p.grantedTo.user) || null;
-      if (user) {
-        const name = user.displayName || user.email || 'Utilisateur';
-        const email = user.email || '';
-        const role = simplifyRole(p.roles);
-        const color = roleBadgeColor(role);
-        const label = roleLabel(role);
-        const initials = name.substring(0,2).toUpperCase();
-        html += `<div class="perm-principal-row" data-type="user" data-id="${p.id}" data-name="${name}" data-role="${role}" data-permid="${p.id}" onclick="selectPrincipal(this)">
-          <div class="perm-avatar" style="background:${color};width:28px;height:28px;font-size:11px">${initials}</div>
-          <div class="perm-member-info">
-            <div class="perm-member-name">${name}</div>
-            <div class="perm-member-email">${email}</div>
-          </div>
-          <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:${color};color:white">${label}</span>
-        </div>`;
-      }
-    });
-
-    list.innerHTML = html || '<div style="padding:14px;color:var(--text-muted);font-size:13px">Aucun accès explicite configuré</div>';
-    list.querySelectorAll('.perm-principal-row').forEach(el => {
-      el.style.cssText += 'display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.1s';
-      el.addEventListener('mouseenter', () => { if (!el.classList.contains('selected')) el.style.background = 'var(--hover-row)'; });
-      el.addEventListener('mouseleave', () => { if (!el.classList.contains('selected')) el.style.background = ''; });
-    });
-  } catch(e) {
-    list.innerHTML = `<div style="color:#e74c3c;padding:16px">Erreur: ${e.message}</div>`;
-  }
-}
-
-function selectPrincipal(el) {
-  document.querySelectorAll('.perm-principal-row').forEach(r => {
-    r.classList.remove('selected');
-    r.style.background = '';
-  });
-  el.classList.add('selected');
-  el.style.background = 'var(--accent-light)';
-  selectedPrincipal = {
-    type: el.dataset.type,
-    id: el.dataset.id,
-    name: el.dataset.name,
-    role: el.dataset.role,
-    permId: el.dataset.permid || null
-  };
-  document.getElementById('perm-detail-label').textContent = `Autorisations pour ${selectedPrincipal.name}`;
-  // Cocher le bon radio
-  document.querySelectorAll('input[name="perm-level"]').forEach(r => {
-    r.checked = r.value === selectedPrincipal.role;
-    r.disabled = selectedPrincipal.type === 'group'; // groupes = lecture seule dans ce tableau
-  });
-}
-
-async function onPermLevelChange(radio) {
-  if (!selectedPrincipal || selectedPrincipal.type === 'group') return;
-  const newRole = radio.value;
-  const graphRole = newRole === 'owner' ? 'write' : newRole === 'write' ? 'write' : 'read';
-  try {
-    await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions/'+selectedPrincipal.permId, 'PATCH', { roles: [graphRole] });
-    selectedPrincipal.role = newRole;
-    await loadPermissions();
-  } catch(e) {
-    alert('Erreur: ' + e.message);
-  }
-}
-
-async function removeSelectedPrincipal() {
-  if (!selectedPrincipal) { alert('Sélectionnez un élément dans la liste.'); return; }
-  if (selectedPrincipal.type === 'group') { alert('Pour gérer les membres d\'un groupe, utilisez le bouton Ajouter.'); return; }
-  if (!confirm(`Supprimer l'accès de "${selectedPrincipal.name}" ?`)) return;
-  try {
-    await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/permissions/'+selectedPrincipal.permId, 'DELETE');
-    selectedPrincipal = null;
-    document.getElementById('perm-detail-label').textContent = 'Autorisations';
-    document.querySelectorAll('input[name="perm-level"]').forEach(r => r.checked = false);
-    await loadPermissions();
-  } catch(e) {
-    alert('Erreur: ' + e.message);
-  }
-}
-
-function showAddPrincipal() {
-  document.getElementById('add-principal-modal').classList.add('open');
-  onPrincipalTypeChange();
-}
-
-function closeAddPrincipal() {
-  document.getElementById('add-principal-modal').classList.remove('open');
-  document.getElementById('add-principal-email').value = '';
-  document.getElementById('add-group-email').value = '';
-}
-
-function onPrincipalTypeChange() {
-  const type = document.getElementById('add-principal-type').value;
-  document.getElementById('add-principal-user-field').style.display = type === 'user' ? '' : 'none';
-  document.getElementById('add-principal-group-field').style.display = type === 'group' ? '' : 'none';
-  document.getElementById('add-principal-role').closest('div').style.display = type === 'user' ? '' : 'none';
-}
-
-async function confirmAddPrincipal() {
-  const type = document.getElementById('add-principal-type').value;
-  try {
-    if (type === 'user') {
-      const email = document.getElementById('add-principal-email').value.trim();
-      const role = document.getElementById('add-principal-role').value;
-      if (!email) { alert('Veuillez saisir un email.'); return; }
-      const graphRole = role === 'owner' ? 'write' : role === 'write' ? 'write' : 'read';
-      await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/invite', 'POST', {
-        requireSignIn: true, sendInvitation: false,
-        roles: [graphRole], recipients: [{ email }]
-      });
-      alert('✅ Accès accordé à ' + email);
-    } else {
-      const groupId = document.getElementById('add-principal-group').value;
-      const email = document.getElementById('add-group-email').value.trim();
-      if (!email) { alert('Veuillez saisir un email.'); return; }
-      const token = await getToken();
-      const digest = await getRequestDigest(token);
-      const resolveRes = await fetch(`${SITE_URL}/_api/web/EnsureUser('${email}')`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json;odata=verbose', 'Content-Type': 'application/json;odata=verbose', 'X-RequestDigest': digest }
-      });
-      if (!resolveRes.ok) throw new Error('Utilisateur introuvable : ' + email);
-      const userData = await resolveRes.json();
-      const addRes = await fetch(`${SITE_URL}/_api/web/SiteGroups/GetById(${groupId})/users`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json;odata=verbose', 'Content-Type': 'application/json;odata=verbose', 'X-RequestDigest': digest },
-        body: JSON.stringify({ '__metadata': { 'type': 'SP.User' }, 'LoginName': userData.d.LoginName })
-      });
-      if (!addRes.ok) throw new Error(await addRes.text());
-      alert('✅ ' + email + ' ajouté au groupe');
-    }
-    closeAddPrincipal();
-    await loadPermissions();
-  } catch(e) {
-    alert('Erreur: ' + e.message);
-  }
-}
-
-async function showPermissionsModal() {
-  if (!ctxTarget) return;
-  document.getElementById('perm-title').textContent = ctxTarget.name;
-  selectedPrincipal = null;
-  document.getElementById('perm-detail-label').textContent = 'Autorisations';
-  document.querySelectorAll('input[name="perm-level"]').forEach(r => r.checked = false);
-  document.getElementById('permissions-modal').classList.add('open');
-  await loadPermissions();
-}
-
-function closePermissionsModal() {
-  document.getElementById('permissions-modal').classList.remove('open');
-}
-
+// Convertir les rôles Graph en 3 niveaux simplifiés
 function simplifyRole(roles) {
   if (!roles || !roles.length) return 'read';
   const r = roles[0];
@@ -1649,6 +1252,7 @@ function roleBadgeColor(r) {
 
 
 
+
 function updateRoleDesc() {
   const sel = document.getElementById('perm-add-role');
   const desc = document.getElementById('perm-role-desc');
@@ -1662,149 +1266,108 @@ function updateRoleDesc() {
   if (d) { desc.textContent = d.text; desc.style.borderLeft = '3px solid '+d.color; desc.style.paddingLeft = '10px'; desc.style.color = 'var(--text-muted)'; desc.style.fontSize = '12px'; desc.style.marginTop = '6px'; }
 }
 
-
-// ─── PARTAGER ─────────────────────────────────────────────────────────────────
-
-function openShareModal() {
-  if (!ctxTarget) return;
-  document.getElementById('share-title').textContent = ctxTarget.name;
-  document.getElementById('share-emails').value = '';
-  document.getElementById('share-role').value = 'write';
-  document.getElementById('share-message').value = '';
-  document.getElementById('share-send-email').checked = true;
-  document.getElementById('share-link-type').value = 'view';
-  document.getElementById('share-link-expiry').value = '';
-  document.getElementById('share-link-password').value = '';
-  document.getElementById('share-link-result').style.display = 'none';
-  document.getElementById('share-link-url').value = '';
-  switchShareTab('invite');
-  document.getElementById('share-modal').classList.add('open');
+async function createShareLink(type) {
+  try {
+    const res = await graphCall('/drives/'+currentDriveId+'/items/'+ctxTarget.id+'/createLink', 'POST', {
+      type: type === 'view' ? 'view' : 'edit', scope: 'anonymous'
+    });
+    const url = (res.link && res.link.webUrl) || '';
+    document.getElementById('perm-link-url').value = url;
+    document.getElementById('perm-link-result').style.display = '';
+  } catch(e) {
+    if (e.message.includes('AnonymousLinkCreation') || e.message.includes('disabled')) {
+      alert('Les liens anonymes sont désactivés sur ce tenant.\nActivez-les dans : Centre admin SharePoint > Stratégies > Partage.');
+    } else {
+      alert('Erreur: '+e.message);
+    }
+  }
 }
 
-function closeShareModal() {
-  document.getElementById('share-modal').classList.remove('open');
-}
-
-function switchShareTab(tab) {
-  const isInvite = tab === 'invite';
-  document.getElementById('share-panel-invite').style.display = isInvite ? '' : 'none';
-  document.getElementById('share-panel-link').style.display = isInvite ? 'none' : '';
-  document.getElementById('share-tab-invite').style.color = isInvite ? 'var(--accent)' : 'var(--text-muted)';
-  document.getElementById('share-tab-invite').style.borderBottomColor = isInvite ? 'var(--accent)' : 'transparent';
-  document.getElementById('share-tab-link').style.color = isInvite ? 'var(--text-muted)' : 'var(--accent)';
-  document.getElementById('share-tab-link').style.borderBottomColor = isInvite ? 'transparent' : 'var(--accent)';
-  document.getElementById('share-action-text').textContent = isInvite ? "Envoyer l'invitation" : 'Générer le lien';
+function copyAndAlert(url) {
+  navigator.clipboard.writeText(url);
+  alert('Lien copié !');
 }
 
 function copyShareLink() {
-  const url = document.getElementById('share-link-url').value;
-  if (!url) return;
-  navigator.clipboard.writeText(url).then(() => alert('✅ Lien copié dans le presse-papiers'));
+  navigator.clipboard.writeText(document.getElementById('perm-link-url').value);
+  alert('Lien copié !');
 }
 
-async function doShareAction() {
-  const tab = document.getElementById('share-panel-invite').style.display !== 'none' ? 'invite' : 'link';
-  if (tab === 'invite') await doShareInvite();
-  else await doShareLink();
-}
+function closeShareModal() { document.getElementById('share-modal').classList.remove('open'); }
 
-async function doShareInvite() {
-  const emails = document.getElementById('share-emails').value.split(',').map(e => e.trim()).filter(Boolean);
+async function doShare() {
+  const emails = document.getElementById('share-emails').value.split(',').map(e=>e.trim()).filter(Boolean);
   const role = document.getElementById('share-role').value;
   const message = document.getElementById('share-message').value;
-  const sendEmail = document.getElementById('share-send-email').checked;
   if (!emails.length) { alert('Entrez au moins un email'); return; }
-
-  const btn = document.getElementById('share-action-text');
+  
+  const btn = document.getElementById('share-btn-text');
   btn.textContent = 'Envoi...';
 
   try {
+    const novadocLink = APP_URL;
     const token = await getToken();
-    const roleLabel = role === 'write' ? 'Modification' : 'Lecture seule';
-
+    const roleLabel = role === 'write' ? 'Lecture et modification' : 'Lecture seule';
+    
+    // Étape 1: Accorder les droits via invite (sans email Microsoft)
     for (const email of emails) {
       await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}/invite`, 'POST', {
         requireSignIn: true,
         sendInvitation: false,
-        roles: [role],
+        roles: [role === 'write' ? 'write' : 'read'],
         recipients: [{ email }]
       });
     }
 
-    if (sendEmail) {
-      for (const email of emails) {
-        const senderName = document.getElementById('user-name').textContent;
-        const msgContent = message || `${senderName} vous a partagé l'élément suivant :`;
-        const htmlContent = `
-          <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px">
-            <h2 style="color:#2f6fd4">NovaDoc — Partage</h2>
-            <p>Bonjour,</p>
-            <p>${msgContent}</p>
-            <div style="background:#f4f5f7;border-radius:8px;padding:16px;margin:20px 0">
-              <strong>${ctxTarget.name}</strong><br>
-              <span style="color:#666;font-size:13px">Droits : ${roleLabel}</span>
-            </div>
-            <a href="${APP_URL}" style="display:inline-block;background:#2f6fd4;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">
-              Accéder à NovaDoc
-            </a>
-            <p style="color:#999;font-size:12px;margin-top:24px">Connectez-vous avec votre compte Microsoft 365 sur ${APP_URL}</p>
-          </div>`;
-        const mailRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: {
-              subject: `[NovaDoc] ${senderName} a partagé "${ctxTarget.name}"`,
-              body: { contentType: 'HTML', content: htmlContent },
-              toRecipients: [{ emailAddress: { address: email } }]
-            },
-            saveToSentItems: false
-          })
-        });
-        if (!mailRes.ok) {
-          const err = await mailRes.text();
-          if (!err.includes('MailboxNotEnabledForRESTAPI') && !err.includes('inactive') && !err.includes('on-premise')) {
-            throw new Error(err);
-          }
+    // Étape 2: Envoyer notre propre email via Mail.Send (sans liens SharePoint)
+    for (const email of emails) {
+      const htmlContent = `
+        <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px">
+          <h2 style="color:#2f6fd4">NovaDoc — Partage de document</h2>
+          <p>Bonjour,</p>
+          <p>${message || `<strong>${document.getElementById('user-name').textContent}</strong> vous a partagé l'élément suivant :`}</p>
+          <div style="background:#f4f5f7;border-radius:8px;padding:16px;margin:20px 0">
+            <strong>${ctxTarget.name}</strong><br>
+            <span style="color:#666;font-size:13px">Droits : ${roleLabel}</span>
+          </div>
+          <a href="${novadocLink}" style="display:inline-block;background:#2f6fd4;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">
+            Accéder à NovaDoc
+          </a>
+          <p style="color:#999;font-size:12px;margin-top:24px">
+            Connectez-vous avec votre compte Microsoft 365 sur ${novadocLink}
+          </p>
+        </div>`;
+      
+      const mailBody = {
+        message: {
+          subject: `[NovaDoc] ${document.getElementById('user-name').textContent} a partagé "${ctxTarget.name}"`,
+          body: { contentType: 'HTML', content: htmlContent },
+          toRecipients: [{ emailAddress: { address: email } }]
+        },
+        saveToSentItems: false
+      };
+      
+      const mailRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(mailBody)
+      });
+      if (!mailRes.ok) {
+        const errText = await mailRes.text();
+        if (errText.includes('MailboxNotEnabledForRESTAPI') || errText.includes('inactive') || errText.includes('on-premise')) {
+          console.warn('Email non envoyé (boîte non Exchange Online) - partage accordé quand même');
+        } else {
+          throw new Error(errText);
         }
       }
     }
-
+    
     closeShareModal();
-    alert(`✅ Accès accordé à : ${emails.join(', ')}`);
+    alert(`✅ Droits accordés à : ${emails.join(', ')}\n\n(Email de notification non envoyé : boîte mail non compatible Exchange Online)`);
   } catch(e) {
-    alert('Erreur partage : ' + e.message);
+    alert('Erreur partage: '+e.message);
   } finally {
     btn.textContent = "Envoyer l'invitation";
-  }
-}
-
-async function doShareLink() {
-  const linkType = document.getElementById('share-link-type').value;
-  const expiry = document.getElementById('share-link-expiry').value;
-  const password = document.getElementById('share-link-password').value.trim();
-
-  const btn = document.getElementById('share-action-text');
-  btn.textContent = 'Génération...';
-
-  try {
-    const body = {
-      type: linkType,
-      scope: 'organization'
-    };
-    if (expiry) body.expirationDateTime = new Date(expiry + 'T23:59:59Z').toISOString();
-    if (password) body.password = password;
-
-    const result = await graphCall(`/drives/${currentDriveId}/items/${ctxTarget.id}/createLink`, 'POST', body);
-    const url = result?.link?.webUrl;
-    if (!url) throw new Error('Lien non retourné par Graph');
-
-    document.getElementById('share-link-url').value = url;
-    document.getElementById('share-link-result').style.display = '';
-  } catch(e) {
-    alert('Erreur génération lien : ' + e.message);
-  } finally {
-    btn.textContent = 'Générer le lien';
   }
 }
 
@@ -2124,18 +1687,9 @@ async function createNew(type) {
     const name = prompt('Nom du dossier :');
     if (!name) return;
     try {
-      const newFolder = await graphCall(`/drives/${currentDriveId}/items/${folderId}/children`, 'POST', {
+      await graphCall(`/drives/${currentDriveId}/items/${folderId}/children`, 'POST', {
         name, folder: {}, '@microsoft.graph.conflictBehavior': 'rename'
       });
-      if (newFolder && newFolder.id && currentUserEmail) {
-        try {
-          await graphCall(`/drives/${currentDriveId}/items/${newFolder.id}/invite`, 'POST', {
-            requireSignIn: true, sendInvitation: false,
-            roles: ['write'],
-            recipients: [{ email: currentUserEmail }]
-          });
-        } catch(e2) { console.warn('CT créateur dossier:', e2.message); }
-      }
       await loadCurrentFolder();
       await loadTree(true);
     } catch(e) { alert(permissionErrorMsg(e)); }
@@ -2176,17 +1730,6 @@ async function createNew(type) {
       body
     });
     if (!putRes.ok) throw new Error(await putRes.text());
-    const newFile = await putRes.json().catch(()=>null);
-	console.log('newFile:', newFile);
-    if (newFile && newFile.id && currentUserEmail) {
-      try {
-        await graphCall(`/drives/${currentDriveId}/items/${newFile.id}/invite`, 'POST', {
-          requireSignIn: true, sendInvitation: false,
-          roles: ['write'],
-          recipients: [{ email: currentUserEmail }]
-        });
-      } catch(e2) { console.warn('CT créateur fichier:', e2.message); }
-    }
     await loadCurrentFolder();
   } catch(e) { hideLoading(); alert(permissionErrorMsg(e)); await loadCurrentFolder(); }
 }

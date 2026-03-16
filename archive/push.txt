@@ -1,0 +1,3 @@
+git add index.html
+git commit -m "MAJ 1"
+git push
