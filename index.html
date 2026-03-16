@@ -731,39 +731,53 @@ async function expandTreeTo(path) {
   }
 }
 
-// Détecter le rôle sur un item — remonte sur les parents si permissions vides (héritage SP)
+// Détecter le rôle réel via PATCH anodin — fonctionne pour users internes ET guests
 async function detectRole(itemId) {
-  const visited = new Set();
-  let id = itemId;
-  while (id && !visited.has(id)) {
-    visited.add(id);
-    const permsData = await graphCall(`/drives/${currentDriveId}/items/${id}/permissions`);
-    const perms = permsData.value || [];
+  const token = await getToken();
+  const resolvedId = itemId === 'root' ? 'root' : itemId;
+  const endpoint = `/drives/${currentDriveId}/items/${resolvedId}`;
 
-    // Chercher une permission directe pour l'utilisateur courant
-    const myPerm = perms.find(p => {
-      const u = (p.grantedToV2&&p.grantedToV2.user)||(p.grantedTo&&p.grantedTo.user)||{};
-      return (u.email||'').toLowerCase() === currentUserEmail;
+  try {
+    // Récupérer le nom actuel de l'item
+    const itemData = await graphCall(`${endpoint}?$select=id,name`);
+
+    // PATCH no-op : renvoyer le même nom — teste write sans rien changer
+    const patchRes = await fetch(`${GRAPH_BASE}${endpoint}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ name: itemData.name })
     });
-    if (myPerm) return resolveRole(myPerm.roles);
 
-    // Chercher via les groupes (grantedToIdentities)
-    const groupPerm = perms.find(p => {
-      const ids = p.grantedToIdentitiesV2 || p.grantedToIdentities || [];
-      return ids.length > 0 && p.roles && p.roles.length > 0;
-    });
-    if (groupPerm) return resolveRole(groupPerm.roles);
+    if (!patchRes.ok) return 'read';
 
-    // Permissions vides = héritage actif → remonter au parent
-    if (id === 'root') break;
+    // PATCH ok = au moins write. Tester owner via GET /permissions
     try {
-      const itemData = await graphCall(`/drives/${currentDriveId}/items/${id}?$select=id,parentReference`);
-      const parentId = itemData.parentReference && itemData.parentReference.id;
-      if (!parentId || parentId === id) break;
-      id = parentId;
-    } catch { break; }
+      const permData = await graphCall(`${endpoint}/permissions`);
+      const myOwner = (permData.value || []).find(p => {
+        const u = (p.grantedToV2&&p.grantedToV2.user)||(p.grantedTo&&p.grantedTo.user)||{};
+        const isMe = (u.email||'').toLowerCase() === currentUserEmail;
+        const ids = p.grantedToIdentitiesV2 || p.grantedToIdentities || [];
+        const meInIds = ids.some(i => (i.user&&(i.user.email||'').toLowerCase()===currentUserEmail));
+        return (isMe || meInIds) && p.roles && p.roles.includes('owner');
+      });
+      if (myOwner) return 'owner';
+
+      // Fallback owner : tenter POST createLink (échoue en 403 si pas owner)
+      const linkRes = await fetch(`${GRAPH_BASE}${endpoint}/createLink`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'view', scope: 'organization' })
+      });
+      if (linkRes.ok) return 'owner';
+    } catch { /* pas owner */ }
+
+    return 'write';
+  } catch {
+    return 'read';
   }
-  return 'read'; // aucune permission trouvée
 }
 
 async function loadCurrentFolder(filter='') {
